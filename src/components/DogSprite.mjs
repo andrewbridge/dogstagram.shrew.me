@@ -1,4 +1,5 @@
 import { css, keyframes } from "goober";
+import { DOG_STATES, DOG_VARIANTS } from "../constants.mjs";
 
 const playSpriteAnimation = keyframes`
     100% {
@@ -73,6 +74,24 @@ const styles = css`
         --sprite-animation-play-state: running;
     }
 `;
+
+// Preload sprite images
+const imageUrls = [];
+for (const variant of DOG_VARIANTS) {
+    for (const state of DOG_STATES) {
+        imageUrls.push(`./assets/dogs/${variant}/${state}.png`);
+    }
+}
+
+const styleTag = document.createElement('style');
+styleTag.innerHTML = `
+    body::after {
+        content: '';
+        display: none;
+        background-image: ${imageUrls.map(url => `url(${url})`).join(", ")};
+    }
+`;
+document.head.appendChild(styleTag);
 
 export default {
     name: 'DogSprite',

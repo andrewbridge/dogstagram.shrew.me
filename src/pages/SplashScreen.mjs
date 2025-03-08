@@ -28,32 +28,16 @@ const styles = css`
         box-sizing: border-box;
     }
 
-    &:not(.loading) .logo {
+    & .logo {
         width: 33%;
         animation: ${fadeAnimation} 0.5s 2s forwards;
     }
 `;
 
-const preloadImage = (url) => new Promise((resolve, reject) =>{
-    const img = new Image();
-    img.src = url;
-    img.onload = resolve;
-    img.onerror = reject;
-});
-
 export default {
     name: 'SplashScreen',
     inject: ['router'],
-    data: () => ({ error: null, loaded: false }),
-    created() {
-        const promises = [];
-        for (const variant of DOG_VARIANTS) {
-            for (const state of DOG_STATES) {
-                promises.push(preloadImage(`./assets/dogs/${variant}/${state}.png`));
-            }
-        }
-        Promise.all(promises).then(() => this.loaded = true);
-    },
+    data: () => ({ error: null }),
     mounted() {
         this.$refs.logo.addEventListener('animationend', () => {
             if (dogVariant.value === null) {
@@ -64,7 +48,7 @@ export default {
         });
     },
     template: /*html*/`
-    <div class="${styles}" :class="{ loading: !loaded }">
+    <div class="${styles}">
         <img ref="logo" src="./assets/logo.png" alt="Logo" class="logo" />
     </div>`
 }

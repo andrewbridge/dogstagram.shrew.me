@@ -209,7 +209,6 @@ export default {
         await this.move(50);
         this.state = 'sitting';
         this.lastActionEnd = Date.now();
-        wait(2500).then(this.feedHandler);
         this.act();
     },
     unmounted() {

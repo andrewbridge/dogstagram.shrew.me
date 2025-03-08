@@ -1,5 +1,7 @@
 import { css, keyframes } from "goober";
+import { DOG_STATES, DOG_VARIANTS } from "../constants.mjs";
 import { dogVariant } from "../services/data.mjs";
+
 
 const fadeAnimation = keyframes`
     0% {
@@ -26,16 +28,32 @@ const styles = css`
         box-sizing: border-box;
     }
 
-    & .logo {
+    &:not(.loading) .logo {
         width: 33%;
         animation: ${fadeAnimation} 0.5s 2s forwards;
     }
 `;
 
+const preloadImage = (url) => new Promise((resolve, reject) =>{
+    const img = new Image();
+    img.src = url;
+    img.onload = resolve;
+    img.onerror = reject;
+});
+
 export default {
     name: 'SplashScreen',
     inject: ['router'],
-    data: () => ({ error: null }),
+    data: () => ({ error: null, loaded: false }),
+    created() {
+        const promises = [];
+        for (const variant of DOG_VARIANTS) {
+            for (const state of DOG_STATES) {
+                promises.push(preloadImage(`./assets/dogs/${variant}/${state}.png`));
+            }
+        }
+        Promise.all(promises).then(() => this.loaded = true);
+    },
     mounted() {
         this.$refs.logo.addEventListener('animationend', () => {
             if (dogVariant.value === null) {
@@ -46,7 +64,7 @@ export default {
         });
     },
     template: /*html*/`
-    <div class="${styles}">
+    <div class="${styles}" :class="{ loading: !loaded }">
         <img ref="logo" src="./assets/logo.png" alt="Logo" class="logo" />
     </div>`
 }

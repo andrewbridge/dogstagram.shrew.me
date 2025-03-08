@@ -117,6 +117,7 @@ const styles = css`
 
         & button {
             height: 100%;
+            width: 6vh;
         }
     }
 

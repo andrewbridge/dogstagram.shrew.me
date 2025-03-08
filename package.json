@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "serve": "npx simplehttpserver -p 8080 src",
+    "dev": "npx live-server src --port 8080 --no-browser"
+  }
+}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Dogstagram</title>
+    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicons/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Dogstagram" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        font-family: serif;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "vue": "https://unpkg.com/vue@3.2.37/dist/vue.esm-browser.js",
+          "goober": "https://unpkg.com/goober@2.1.10/dist/goober.esm.js",
+          "route-parser": "https://cdn.skypack.dev/route-parser",
+          "phaser": "https://cdn.jsdelivr.net/npm/phaser@3.88.2/dist/phaser.esm.js",
+          "howler": "https://esm.sh/howler"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="teleport-root"></div>
+    <script src="index.mjs" type="module"></script>
+  </body>
+</html>

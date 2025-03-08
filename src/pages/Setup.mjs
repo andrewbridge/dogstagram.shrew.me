@@ -116,11 +116,13 @@ const styles = css`
     }
 `;
 
+const dogVariants = DOG_VARIANTS;
+
 export default {
 	name: "Setup",
     inject: ["router"],
 	components: { MinimalInput, DogSprite, RetroButton },
-	data: () => ({ globalDogName: dogName, globalDogVariant: dogVariant, name: dogName.value, dogVariants: Array.from(DOG_VARIANTS), dogVariantIndexShown: Math.max(dogVariants.indexOf(dogVariant.value), 0) }),
+	data: () => ({ globalDogName: dogName, globalDogVariant: dogVariant, name: dogName.value, dogVariants, dogVariantIndexShown: Math.max(dogVariants.indexOf(dogVariant.value), 0) }),
     computed: {
         dogVariantShown() {
             return this.dogVariants[this.dogVariantIndexShown];

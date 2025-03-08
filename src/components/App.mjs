@@ -1,5 +1,4 @@
 import { css } from "goober";
-import Header from "./Header.mjs";
 import ProgrammaticModals from "./ProgrammaticModals.mjs";
 
 // These styles will constrain the page to a vertical, mobile-like view, centred on the page
@@ -34,7 +33,7 @@ const styles = css`
 
 export default {
     name: "App",
-    components: { Header, ProgrammaticModals },
+    components: { ProgrammaticModals },
     inject: ["router"],
     template: `<div class="${styles}">
         <main class="page-wrapper">

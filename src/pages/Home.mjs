@@ -163,7 +163,7 @@ export default {
         <div class="top-display">
             <img src="./assets/coin.png" />
             <p>{{ accountBalanceDisplay }}</p>
-            <p class="name">{{dogName}}</p>
+            <p class="name" @click="router.goTo('Setup')">{{dogName}}</p>
         </div>
         <div class="room">
             <Dogagotchi class="${dogAdjustment}" />

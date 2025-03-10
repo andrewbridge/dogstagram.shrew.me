@@ -221,8 +221,9 @@ export default {
             "My face when hooman says 'walkies'! 🤩",
             "Dreaming of chasing squirrels. One day I'll catch one! 🐿️",
             "Is it dinner time yet? I'm starving! 🍗",
-            "Just being a good boi/gurl. Deserve all da treatz!😇",
+            "Just being a good gurl. Deserve all da treatz!😇",
         ];
+        let workingCaptions = Array.from(captions);
         // We'll use placedog.net for the post images themselves, you can use this URL with ?id=x to get a specific image, there are 248 images available, starting at 1
         // We'll use picsum.photos for the profile photos, you can use this URL with ?random to get a random image from a seed
         let postDate = Date.now() - Math.floor(Math.random() * 1000 * 60 * 60 * 24 * 7);
@@ -238,10 +239,12 @@ export default {
             const imageSet = this.posts.length % 3 === 0 && dachshundDogUrls.length > 0 ? dachshundDogUrls : randomDogUrls;
             const imageId = Math.floor(Math.random() * imageSet.length);
             const imageUrl = imageSet.splice(imageId, 1)[0];
+            const caption = workingCaptions.splice(Math.floor(Math.random() * workingCaptions.length), 1)[0];
+            if (workingCaptions.length === 0) workingCaptions = Array.from(captions);
             this.posts.push({
                 name: names[Math.floor(Math.random() * names.length)],
                 location: locations[Math.floor(Math.random() * locations.length)],
-                caption: captions[Math.floor(Math.random() * captions.length)],
+                caption,
                 date: getRelativeTimeString(postDate),
                 profileImageUrl: `https://picsum.photos/800?random=${imageId}`,
                 imageUrl,

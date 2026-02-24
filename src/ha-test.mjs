@@ -3,11 +3,207 @@ import {
     haUrl, haToken,
     haConnected, haAvailable, haError,
     plantStates, plantAreaNames, linkedSensorIds, plantSensorValues,
-    isHaConfigured, connectToHA, disconnectFromHA,
+    sunAboveHorizon, connectToHA, disconnectFromHA,
     haEvents,
 } from './services/homeAssistant.mjs';
+import { resolvePlant } from './constants/plants.mjs';
 
-// Track which rows recently changed for the highlight effect
+// ── OpenPlantbook mock data ────────────────────────────────────────────────────
+// Paste the raw JSON response from OpenPlantbook for each plant PID below.
+// GET https://open.plantbook.io/api/v1/plant/detail/{pid}/ (API key required)
+// Fields used: min_soil_moist, max_soil_moist, min_temp, max_temp,
+//              min_light_lux, max_light_lux, min_soil_ec, max_soil_ec
+
+const PLANTBOOK_MOCK = {
+    'monstera deliciosa': {
+        "pid": "monstera deliciosa",
+        "display_pid": "Monstera deliciosa",
+        "alias": "monstera",
+        "category": "Araceae, Monstera",
+        "max_light_mmol": 3400,
+        "min_light_mmol": 1500,
+        "max_light_lux": 15000,
+        "min_light_lux": 800,
+        "max_temp": 32,
+        "min_temp": 12,
+        "max_env_humid": 85,
+        "min_env_humid": 30,
+        "max_soil_moist": 60,
+        "min_soil_moist": 15,
+        "max_soil_ec": 2000,
+        "min_soil_ec": 350,
+        "image_url": "https://opb-img.plantbook.io/monstera%20deliciosa.jpg",
+        "common_names": [
+            {
+                "name": "Monstera deliciosa Verigata",
+                "language_code": "de"
+            },
+            {
+                "name": "Monstera deliciosa",
+                "language_code": "de"
+            },
+            {
+                "name": "Monstera",
+                "language_code": "en"
+            },
+            {
+                "name": "Swiss Cheese Plant",
+                "language_code": "en"
+            },
+            {
+                "name": "Monstera deliciosa",
+                "language_code": "pl"
+            },
+            {
+                "name": "مونستيرا أدانسوني",
+                "language_code": "ar"
+            },
+            {
+                "name": "Monstera télé",
+                "language_code": "fr"
+            },
+            {
+                "name": "Monstera",
+                "language_code": "de"
+            },
+            {
+                "name": "Monstera deliciosa",
+                "language_code": "en"
+            },
+            {
+                "name": "Monstera dziurawa",
+                "language_code": "pl"
+            },
+            {
+                "name": "Monstera",
+                "language_code": "ar"
+            },
+            {
+                "name": "Monstera Zimmer",
+                "language_code": "de"
+            },
+            {
+                "name": "Monstera",
+                "language_code": "sv"
+            },
+            {
+                "name": "Cheese Plant",
+                "language_code": "en"
+            },
+            {
+                "name": "Μονστέρα",
+                "language_code": "el"
+            }
+        ]
+    },
+    'coffea arabica': {
+        "pid": "coffea arabica",
+        "display_pid": "Coffea arabica",
+        "alias": "coffea arabica",
+        "category": "Rubiaceae, Coffea",
+        "max_light_mmol": 4000,
+        "min_light_mmol": 2000,
+        "max_light_lux": 20000,
+        "min_light_lux": 3700,
+        "max_temp": 32,
+        "min_temp": 10,
+        "max_env_humid": 80,
+        "min_env_humid": 30,
+        "max_soil_moist": 60,
+        "min_soil_moist": 15,
+        "max_soil_ec": 2000,
+        "min_soil_ec": 350,
+        "image_url": "https://opb-img.plantbook.io/coffea%20arabica.jpg",
+        "common_names": [
+            {
+                "name": "Arabica-Kaffee",
+                "language_code": "de"
+            },
+            {
+                "name": "Coffee Plant",
+                "language_code": "ar"
+            },
+            {
+                "name": "Coffee",
+                "language_code": "ar"
+            }
+        ]
+    }
+};
+
+// ── Assessment helpers ────────────────────────────────────────────────────────
+
+// OpenPlantbook field names → app sensor keys
+const PB_KEY_MAP = {
+    moisture:    { min: 'min_soil_moist', max: 'max_soil_moist' },
+    illuminance: { min: 'min_light_lux',  max: 'max_light_lux'  },
+    temperature: { min: 'min_temp',       max: 'max_temp'       },
+    conductivity:{ min: 'min_soil_ec',    max: 'max_soil_ec'    },
+};
+
+function mapPbRanges(raw) {
+    if (!raw) return null;
+    const out = {};
+    for (const [key, fields] of Object.entries(PB_KEY_MAP)) {
+        const min = raw[fields.min];
+        const max = raw[fields.max];
+        if (min != null && max != null) out[key] = { min, max };
+    }
+    return Object.keys(out).length ? out : null;
+}
+
+// Returns: 'too-low' | 'warn-low' | 'ok' | 'warn-high' | 'too-high'
+//        | 'night' | 'no-data' | 'no-range'
+function assessStatus(value, range, isIlluminance, sunIsUp) {
+    if (isIlluminance && !sunIsUp) return 'night';
+    if (value === null || value === undefined) return 'no-data';
+    if (!range) return 'no-range';
+    const { min, max } = range;
+    const warn = (max - min) * 0.15;
+    if (value < min)        return 'too-low';
+    if (value < min + warn) return 'warn-low';
+    if (value > max)        return 'too-high';
+    if (value > max - warn) return 'warn-high';
+    return 'ok';
+}
+
+const MOISTURE_STATUS = {
+    'no-data':   { label: 'No reading',     colour: '#808080' },
+    'no-range':  { label: 'No thresholds',  colour: '#808080' },
+    'too-low':   { label: 'Needs watering', colour: '#e06060' },
+    'warn-low':  { label: 'Getting dry',    colour: '#c09030' },
+    'too-high':  { label: 'Overwatered',    colour: '#e06060' },
+    'warn-high': { label: 'Quite wet',      colour: '#c09030' },
+    'ok':        { label: 'OK',             colour: '#60c060' },
+};
+
+const ILLUMINANCE_STATUS = {
+    'night':     { label: '🌙 Night — skipped',    colour: '#6080a0' },
+    'no-data':   { label: 'No reading',            colour: '#808080' },
+    'no-range':  { label: 'No thresholds',         colour: '#808080' },
+    'too-low':   { label: 'Needs more light',      colour: '#e06060' },
+    'warn-low':  { label: 'Could be brighter',     colour: '#c09030' },
+    'too-high':  { label: 'Needs shade',           colour: '#e06060' },
+    'warn-high': { label: 'Quite bright',          colour: '#c09030' },
+    'ok':        { label: 'Good light',            colour: '#60c060' },
+};
+
+// Compute bar percentages for a CSS range bar.
+// Returns { zoneLeft, zoneWidth, markerLeft } as '%' strings (or null if not computable).
+function rangeBar(value, range, scaleMin, scaleMax) {
+    if (!range) return { zoneLeft: null, zoneWidth: null, markerLeft: null };
+    const span = scaleMax - scaleMin;
+    const zoneLeft  = ((range.min - scaleMin) / span * 100).toFixed(1) + '%';
+    const zoneWidth = ((range.max - range.min) / span * 100).toFixed(1) + '%';
+    const markerLeft = value !== null && value !== undefined
+        ? (Math.min(Math.max((value - scaleMin) / span * 100, 0), 100)).toFixed(1) + '%'
+        : null;
+    return { zoneLeft, zoneWidth, markerLeft };
+}
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+
+// Track which rows recently changed for the green highlight effect
 const recentlyChanged = ref({});
 
 // { [plantId]: [{ at, from, to, delta }] } — moisture jumps ≥ 15 found in 24h history
@@ -45,9 +241,9 @@ haEvents.addListener('history', ({ historyData, sensorToPlant }) => {
             if (delta >= 15) {
                 if (!detected[plantId]) detected[plantId] = [];
                 detected[plantId].push({
-                    at: sorted[i].lu * 1000,  // store as milliseconds
-                    from: Math.round(from * 10) / 10,
-                    to:   Math.round(to   * 10) / 10,
+                    at:    sorted[i].lu * 1000,              // store as milliseconds
+                    from:  Math.round(from  * 10) / 10,
+                    to:    Math.round(to    * 10) / 10,
                     delta: Math.round(delta * 10) / 10,
                 });
             }
@@ -58,41 +254,74 @@ haEvents.addListener('history', ({ historyData, sensorToPlant }) => {
     console.log('[history] watering events detected:', detected);
 });
 
+// ── App component ─────────────────────────────────────────────────────────────
+
 const App = {
     setup() {
         const plants = computed(() => {
             return Object.entries(plantStates.value).map(([deviceId, state]) => {
                 const sensors = plantSensorValues.value[deviceId] || {};
                 return {
-                    entityId: deviceId,
-                    name: state.attributes?.friendly_name || deviceId,
-                    area: plantAreaNames.value[deviceId] || '—',
+                    entityId:     deviceId,
+                    name:         state.attributes?.friendly_name || deviceId,
+                    area:         plantAreaNames.value[deviceId] || '—',
                     moisture:     sensors.moisture     ?? null,
                     temperature:  sensors.temperature  ?? null,
                     illuminance:  sensors.illuminance  ?? null,
                     conductivity: sensors.conductivity ?? null,
                     linkedSensors: linkedSensorIds.value[deviceId] || [],
-                    changedAt: recentlyChanged.value[deviceId] || null,
+                    changedAt:    recentlyChanged.value[deviceId] || null,
                 };
             });
         });
 
-        const hasAnyMoisture = computed(() => plants.value.some(p => p.moisture !== null));
+        const hasAnyMoisture    = computed(() => plants.value.some(p => p.moisture    !== null));
         const hasAnyIlluminance = computed(() => plants.value.some(p => p.illuminance !== null));
-        const hasAnyAreas = computed(() => plants.value.some(p => p.area !== '—'));
+        const hasAnyAreas       = computed(() => plants.value.some(p => p.area        !== '—'));
 
         // Flat list of all watering events across all plants, newest first
         const wateredPlants = computed(() => {
             const rows = [];
             for (const [plantId, events] of Object.entries(wateringHistory.value)) {
                 const state = plantStates.value[plantId];
-                const name = state?.attributes?.friendly_name || plantId;
-                const area = plantAreaNames.value[plantId] || '—';
-                for (const e of events) {
-                    rows.push({ plantId, name, area, ...e });
-                }
+                const name  = state?.attributes?.friendly_name || plantId;
+                const area  = plantAreaNames.value[plantId] || '—';
+                for (const e of events) rows.push({ plantId, name, area, ...e });
             }
             return rows.sort((a, b) => b.at < a.at ? -1 : 1);
+        });
+
+        // Plant health assessment — uses PLANTBOOK_MOCK static data and live sensor values
+        const plantHealth = computed(() => {
+            const sunIsUp = sunAboveHorizon.value;
+            return plants.value.map(p => {
+                const { openPlantbookPid } = resolvePlant(p.name);
+                const raw    = openPlantbookPid ? PLANTBOOK_MOCK[openPlantbookPid] : null;
+                const ranges = mapPbRanges(raw);
+
+                const luxScaleMax = ranges?.illuminance ? ranges.illuminance.max * 2 : 10000;
+
+                const moistureKey    = assessStatus(p.moisture,    ranges?.moisture    ?? null, false, sunIsUp);
+                const illuminanceKey = assessStatus(p.illuminance, ranges?.illuminance ?? null, true,  sunIsUp);
+
+                return {
+                    entityId:           p.entityId,
+                    name:               p.name,
+                    area:               p.area,
+                    moisture:           p.moisture,
+                    illuminance:        p.illuminance,
+                    temperature:        p.temperature,
+                    openPlantbookPid,
+                    hasRanges:          !!ranges,
+                    ranges,
+                    moistureKey,
+                    illuminanceKey,
+                    moistureStatus:     MOISTURE_STATUS[moistureKey],
+                    illuminanceStatus:  ILLUMINANCE_STATUS[illuminanceKey],
+                    moistureBar:        rangeBar(p.moisture,    ranges?.moisture    ?? null, 0,          100),
+                    illuminanceBar:     rangeBar(p.illuminance, ranges?.illuminance ?? null, 0, luxScaleMax),
+                };
+            });
         });
 
         return {
@@ -101,6 +330,8 @@ const App = {
             connectToHA, disconnectFromHA,
             plants, hasAnyMoisture, hasAnyIlluminance, hasAnyAreas,
             wateredPlants,
+            sunAboveHorizon,
+            plantHealth,
         };
     },
 
@@ -145,9 +376,9 @@ const App = {
                         <tr v-for="p in plants" :key="p.entityId" :class="{ highlight: !!p.changedAt }">
                             <td>{{ p.name }}</td>
                             <td>{{ p.area }}</td>
-                            <td>{{ p.moisture !== null ? p.moisture + '%' : '—' }}</td>
-                            <td>{{ p.temperature !== null ? p.temperature + '°' : '—' }}</td>
-                            <td>{{ p.illuminance !== null ? p.illuminance + ' lx' : '—' }}</td>
+                            <td>{{ p.moisture     !== null ? p.moisture     + '%'      : '—' }}</td>
+                            <td>{{ p.temperature  !== null ? p.temperature  + '°'      : '—' }}</td>
+                            <td>{{ p.illuminance  !== null ? p.illuminance  + ' lx'    : '—' }}</td>
                             <td>{{ p.conductivity !== null ? p.conductivity + ' µS/cm' : '—' }}</td>
                             <td><pre>{{ p.linkedSensors.join('\\n') || '—' }}</pre></td>
                         </tr>
@@ -207,6 +438,70 @@ const App = {
                         </tr>
                     </tbody>
                 </table>
+            </section>
+
+            <section v-if="haAvailable && plantHealth.length">
+                <h2>🌿 Plant Health Assessment</h2>
+                <p style="color:#606060;margin-bottom:14px">
+                    Sun is currently
+                    <span :style="{color: sunAboveHorizon ? '#c0c040' : '#6080a0'}">
+                        {{ sunAboveHorizon ? '☀️ above horizon' : '🌙 below horizon' }}
+                    </span>
+                    — illuminance assessment is suppressed at night.
+                </p>
+                <div v-for="p in plantHealth" :key="p.entityId" class="health-card">
+                    <p class="health-card-title">
+                        {{ p.name }}
+                        <span style="color:#505060"> — {{ p.area }}</span>
+                        <span style="color:#406080;font-size:11px;margin-left:10px">{{ p.openPlantbookPid || '(unrecognised)' }}</span>
+                    </p>
+
+                    <p v-if="!p.openPlantbookPid" style="color:#808080;font-style:italic;font-size:11px">
+                        Not matched in KNOWN_PLANTS — add an entry in src/constants/plants.mjs with the OpenPlantbook pid
+                    </p>
+                    <p v-else-if="!p.hasRanges" style="color:#808080;font-style:italic;font-size:11px">
+                        Paste the OpenPlantbook JSON for <b style="color:#a0b0c0">{{ p.openPlantbookPid }}</b>
+                        into <b style="color:#a0b0c0">PLANTBOOK_MOCK</b> in src/ha-test.mjs
+                    </p>
+
+                    <template v-else>
+                        <!-- Moisture -->
+                        <div class="sensor-bar-row">
+                            <span class="bar-label">💧 Moisture</span>
+                            <span class="bar-reading">{{ p.moisture !== null ? p.moisture.toFixed(1) + '%' : '—' }}</span>
+                            <div class="range-bar">
+                                <div class="range-zone" :style="{left: p.moistureBar.zoneLeft, width: p.moistureBar.zoneWidth}"></div>
+                                <div class="range-marker" v-if="p.moistureBar.markerLeft !== null" :style="{left: p.moistureBar.markerLeft}"></div>
+                            </div>
+                            <span class="bar-range">{{ p.ranges.moisture.min }}–{{ p.ranges.moisture.max }}%</span>
+                            <span :style="{color: p.moistureStatus.colour}">{{ p.moistureStatus.label }}</span>
+                        </div>
+
+                        <!-- Illuminance (suppressed at night) -->
+                        <div class="sensor-bar-row">
+                            <span class="bar-label">☀️ Light</span>
+                            <span class="bar-reading">{{ p.illuminance !== null ? Math.round(p.illuminance) + ' lx' : '—' }}</span>
+                            <template v-if="p.illuminanceKey === 'night'">
+                                <span :style="{color: p.illuminanceStatus.colour}">{{ p.illuminanceStatus.label }}</span>
+                            </template>
+                            <template v-else>
+                                <div class="range-bar">
+                                    <div class="range-zone" :style="{left: p.illuminanceBar.zoneLeft, width: p.illuminanceBar.zoneWidth}"></div>
+                                    <div class="range-marker" v-if="p.illuminanceBar.markerLeft !== null" :style="{left: p.illuminanceBar.markerLeft}"></div>
+                                </div>
+                                <span class="bar-range">{{ p.ranges.illuminance.min }}–{{ p.ranges.illuminance.max }} lx</span>
+                                <span :style="{color: p.illuminanceStatus.colour}">{{ p.illuminanceStatus.label }}</span>
+                            </template>
+                        </div>
+
+                        <!-- Temperature (no bar — just reading vs range) -->
+                        <div class="sensor-bar-row" v-if="p.temperature !== null && p.ranges.temperature">
+                            <span class="bar-label">🌡 Temp</span>
+                            <span class="bar-reading">{{ p.temperature.toFixed(1) }}°C</span>
+                            <span class="bar-range">(range {{ p.ranges.temperature.min }}–{{ p.ranges.temperature.max }}°C)</span>
+                        </div>
+                    </template>
+                </div>
             </section>
         </div>
     `,

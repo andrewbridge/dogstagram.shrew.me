@@ -32,6 +32,9 @@ export const linkedSensorIds = ref({});
 // { [deviceId]: { moisture, temperature, illuminance, conductivity } }
 export const plantSensorValues = ref({});
 
+// true when sun.sun state is 'above_horizon' — used to suppress illuminance assessment at night
+export const sunAboveHorizon = ref(true);
+
 // EventBus for plantData.mjs to subscribe to HA events
 export const haEvents = new EventBus();
 
@@ -132,6 +135,10 @@ function bootstrap(statesResult, entityRegistryResult, areaRegistryResult, devic
     for (const state of statesResult) {
         stateByEntityId[state.entity_id] = state;
     }
+
+    // Initialise sun position
+    const sunState = stateByEntityId['sun.sun'];
+    if (sunState) sunAboveHorizon.value = sunState.state === 'above_horizon';
 
     // Build plant data from sensor devices
     const newPlantStates = {};
@@ -288,6 +295,10 @@ export function connectToHA() {
         // Live state_changed events
         if (msg.type === 'event' && msg.event?.event_type === 'state_changed') {
             const { entity_id, old_state, new_state } = msg.event.data;
+
+            if (entity_id === 'sun.sun') {
+                sunAboveHorizon.value = new_state?.state === 'above_horizon';
+            }
 
             if (isSensorEntity(entity_id) && sensorToPlant[entity_id]) {
                 const { plantId, sensorType } = sensorToPlant[entity_id];

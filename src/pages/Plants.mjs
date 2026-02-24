@@ -73,11 +73,30 @@ const styles = css`
         padding: 0 0.5vh;
         color: white;
         line-height: 1;
+        position: relative;
     }
 
-    & .room-label {
+    & .page-title {
         font-size: 1.8vh;
         text-align: center;
+    }
+
+    & .header-emoji { font-size: 3vh; }
+
+    & .todo-badge {
+        position: absolute;
+        top: -.4vh;
+        right: -.4vh;
+        background: #e06060;
+        color: white;
+        font-size: 1vh;
+        border-radius: 50%;
+        width: 1.8vh;
+        height: 1.8vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
     }
 
     & .status-strip {
@@ -91,19 +110,18 @@ const styles = css`
         border-bottom: .4vh solid black;
     }
 
-    & .plants-list {
+    /* ── List view ── */
+
+    & .plants-scroll {
         flex-grow: 1;
         overflow-y: auto;
-        padding: 2vh;
-        display: flex;
-        flex-direction: column;
-        gap: 2vh;
     }
 
     & .ha-setup {
         background: rgba(0, 0, 0, 0.45);
         border: .4vh solid rgba(0, 0, 0, 0.5);
         padding: 2vh;
+        margin: 2vh;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -114,41 +132,92 @@ const styles = css`
         line-height: 2;
     }
 
-    & .ha-connect-btn {
+    & .ha-connect-btn { font-size: 1.4vh; }
+
+    & .empty-state {
+        color: rgba(0, 0, 0, 0.4);
+        font-size: 1.5vh;
+        text-align: center;
+        padding: 4vh 2vh;
+        line-height: 2;
+    }
+
+    & .room-section { margin-bottom: 1vh; }
+
+    & .room-header {
+        background: rgba(0, 0, 0, 0.35);
+        color: rgba(255, 255, 255, 0.9);
         font-size: 1.4vh;
+        padding: 1vh 2vh;
+        border-top: .3vh solid rgba(0, 0, 0, 0.5);
+        border-bottom: .3vh solid rgba(0, 0, 0, 0.5);
+    }
+
+    & .plant-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5vh;
+        padding: 1.5vh 2vh;
     }
 
     & .plant-card {
-        background: rgba(0, 0, 0, 0.2);
-        border: .4vh solid rgba(0, 0, 0, 0.3);
+        background: rgba(0, 0, 0, 0.18);
+        border: .4vh solid rgba(0, 0, 0, 0.25);
+        padding: 2vh 1vh 1.5vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1vh;
+        cursor: pointer;
+        &:active { opacity: 0.7; }
+    }
+
+    & .card-emoji { font-size: 5vh; }
+
+    & .card-name {
+        font-size: 1.1vh;
+        color: white;
+        text-align: center;
+        word-break: break-word;
+        line-height: 1.6;
+    }
+
+    & .card-status {
+        width: 1.4vh;
+        height: 1.4vh;
+        border-radius: 50%;
+        border: .2vh solid rgba(0, 0, 0, 0.3);
+        &.status-ok      { background: #60c060; }
+        &.status-problem { background: #e06060; }
+        &.status-unknown { background: #909090; }
+    }
+
+    /* ── Detail view ── */
+
+    & .detail-scroll {
+        flex-grow: 1;
+        overflow-y: auto;
         padding: 2vh;
         display: flex;
         flex-direction: column;
         gap: 1.5vh;
     }
 
-    & .plant-head {
+    & .detail-hero {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
+        justify-content: center;
+        padding: 2vh 0 1vh;
     }
 
-    & .plant-name {
-        display: flex;
-        align-items: center;
-        gap: 1vh;
-        font-size: 2.2vh;
-        color: white;
-    }
+    & .hero-emoji { font-size: 12vh; }
 
-    & .sun-indicator {
-        font-size: 2.2vh;
-    }
-
-    & .sensors {
+    & .sensor-section {
+        background: rgba(0, 0, 0, 0.2);
+        border: .4vh solid rgba(0, 0, 0, 0.3);
+        padding: 2vh;
         display: flex;
         flex-direction: column;
-        gap: 1vh;
+        gap: 1.5vh;
     }
 
     & .sensor-row {
@@ -158,61 +227,124 @@ const styles = css`
         font-size: 1.7vh;
     }
 
-    & .sensor-icon { width: 2.5vh; text-align: center; }
+    & .sensor-icon  { width: 2.5vh; text-align: center; flex-shrink: 0; }
+    & .sensor-label { flex-grow: 1; color: rgba(255, 255, 255, 0.65); font-size: 1.4vh; }
+    & .sensor-value { font-size: 1.7vh; }
 
-    & .sensor-night {
-        color: rgba(255, 255, 255, 0.4);
-        font-size: 1.2vh;
+    & .sun-row {
+        color: rgba(255, 255, 255, 0.65);
+        font-size: 1.3vh;
+        text-align: center;
     }
 
     & .no-sensors {
         color: rgba(255, 255, 255, 0.35);
         font-size: 1.3vh;
+        text-align: center;
     }
 
-    & .pet-row {
+    & .pet-section {
         display: flex;
-        justify-content: flex-end;
+        justify-content: center;
+        padding: 1vh 0 2vh;
     }
 
-    & .pet-btn {
-        font-size: 1.5vh;
-    }
+    & .pet-btn { font-size: 1.5vh; }
 
     & .faux-disabled {
         opacity: 0.5;
         cursor: not-allowed;
     }
 
-    & .empty-room {
-        color: rgba(0, 0, 0, 0.4);
-        font-size: 1.6vh;
-        text-align: center;
-        padding: 4vh 2vh;
-    }
+    /* ── Todo overlay ── */
 
-    & .room-picker-overlay {
+    & .todo-overlay {
         position: absolute;
         inset: 0;
-        background: rgba(0, 0, 0, 0.85);
+        background: rgba(0, 0, 0, 0.7);
         display: flex;
         flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 2vh;
+        justify-content: flex-end;
         z-index: 10;
-        padding: 4vh;
     }
 
-    & .room-picker-title {
+    & .todo-panel {
+        background: var(--room-wall, #d0ccc8);
+        border-top: .5vh solid black;
+        max-height: 70%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    & .todo-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.5vh 2vh;
+        background: rgba(0, 0, 0, 0.35);
         color: white;
-        font-size: 1.8vh;
+        flex-shrink: 0;
+        border-bottom: .4vh solid black;
     }
 
-    & .room-btn {
-        width: 100%;
-        max-width: 40vh;
-        font-size: 1.8vh;
+    & .todo-title { font-size: 1.6vh; }
+
+    & .todo-close-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 2.5vh;
+        color: white;
+        line-height: 1;
+        padding: 0 0.5vh;
+    }
+
+    & .todo-body {
+        overflow-y: auto;
+        padding: 1.5vh 2vh;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5vh;
+    }
+
+    & .todo-empty {
+        color: rgba(0, 0, 0, 0.5);
+        font-size: 1.4vh;
+        text-align: center;
+        padding: 3vh 0;
+        line-height: 2;
+    }
+
+    & .todo-item {
+        display: flex;
+        align-items: center;
+        gap: 1.5vh;
+        background: rgba(0, 0, 0, 0.12);
+        border: .3vh solid rgba(0, 0, 0, 0.2);
+        padding: 1.5vh;
+        cursor: pointer;
+        &:active { opacity: 0.7; }
+        &.todo-done { opacity: 0.45; }
+    }
+
+    & .todo-plant-emoji { font-size: 3.5vh; flex-shrink: 0; }
+
+    & .todo-info {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.7vh;
+    }
+
+    & .todo-plant-name  { font-size: 1.3vh; color: rgba(0, 0, 0, 0.8); }
+    & .todo-action-label { font-size: 1.2vh; color: rgba(0, 0, 0, 0.55); }
+
+    & .todo-check {
+        font-size: 2.5vh;
+        color: #60c060;
+        flex-shrink: 0;
+        width: 2.5vh;
+        text-align: center;
     }
 
     & .toast { font-size: 2.5vh; }
@@ -229,8 +361,10 @@ export default {
         // Plant data reactive refs
         cachedPlants, plantInteractions,
         // Local UI state
-        activeRoomKey: null,
-        showRoomPicker: false,
+        view: 'list',          // 'list' | 'detail'
+        selectedPlantId: null,
+        showTodo: false,
+        mountedAt: 0,
         toastText: '',
         toastShown: false,
         // Tick ref to trigger cooldown re-evaluation every 5 s
@@ -240,9 +374,7 @@ export default {
     computed: {
         isConfigured() { return isHaConfigured(); },
 
-        // Whether live HA plant data is available
         hasLiveData() {
-            console.log(this.plantStates);
             return Object.keys(this.plantStates).length > 0;
         },
 
@@ -269,64 +401,129 @@ export default {
                     friendlyName,
                     areaId,
                     emoji,
-                    moisture:         sensors.moisture     ?? null,
-                    temperature:      sensors.temperature  ?? null,
-                    illuminance:      sensors.illuminance  ?? null,
-                    conductivity:     sensors.conductivity ?? null,
-                    inSun:            interaction?.inSun ?? false,
-                    hasMovedBefore:   interaction ? interaction.lastMoved > 0 : false,
+                    moisture:       sensors.moisture     ?? null,
+                    temperature:    sensors.temperature  ?? null,
+                    illuminance:    sensors.illuminance  ?? null,
+                    conductivity:   sensors.conductivity ?? null,
+                    inSun:          interaction?.inSun ?? false,
+                    hasMovedBefore: interaction ? interaction.lastMoved > 0 : false,
                 };
             });
         },
 
-        // Rooms that have at least one plant: KNOWN_ROOMS entries first (in definition
-        // order), then any HA areas not in KNOWN_ROOMS
-        occupiedRooms() {
-            const areaIds = new Set(this.allPlants.map(p => p.areaId).filter(Boolean));
-            const known   = Object.keys(KNOWN_ROOMS).filter(id => areaIds.has(id));
-            const unknown = [...areaIds].filter(id => !KNOWN_ROOMS[id]);
-            return [...known, ...unknown].map(areaId => ({
-                areaId,
-                name: this.haAreas[areaId]?.name || areaId,
-            }));
+        // Plants grouped by room, preserving KNOWN_ROOMS order then unknown areas
+        plantsByRoom() {
+            const groups = new Map();
+            // Seed with KNOWN_ROOMS order first so they appear in definition order
+            for (const areaId of Object.keys(KNOWN_ROOMS)) {
+                groups.set(areaId, {
+                    areaId,
+                    name: this.haAreas[areaId]?.name || areaId,
+                    plants: [],
+                });
+            }
+            for (const plant of this.allPlants) {
+                const key = plant.areaId || '__unknown__';
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        areaId: plant.areaId,
+                        name: plant.areaId ? (this.haAreas[plant.areaId]?.name || plant.areaId) : 'Unknown',
+                        plants: [],
+                    });
+                }
+                groups.get(key).plants.push(plant);
+            }
+            // Drop empty room buckets
+            return [...groups.values()].filter(g => g.plants.length > 0);
         },
 
-        activeRoom() {
-            return KNOWN_ROOMS[this.activeRoomKey] || DEFAULT_ROOM;
+        // To-do items: plants whose HA status indicates they need attention
+        todoItems() {
+            if (!this.hasLiveData) return [];
+            return this.allPlants.flatMap(plant => {
+                const attrs       = this.plantStates[plant.entityId]?.attributes || {};
+                const interaction = this.plantInteractions[plant.entityId] || {};
+                const items       = [];
+
+                const moistureStatus    = attrs.moisture_status?.toLowerCase();
+                const illuminanceStatus = attrs.illuminance_status?.toLowerCase();
+
+                if (moistureStatus === 'low') {
+                    items.push({
+                        entityId: plant.entityId,
+                        name:     plant.friendlyName,
+                        emoji:    plant.emoji,
+                        action:   'water',
+                        icon:     '💧',
+                        label:    'Needs watering',
+                        done:     (interaction.lastWatered || 0) > this.mountedAt,
+                    });
+                }
+                if (illuminanceStatus === 'low') {
+                    items.push({
+                        entityId: plant.entityId,
+                        name:     plant.friendlyName,
+                        emoji:    plant.emoji,
+                        action:   'move-sun',
+                        icon:     '☀️',
+                        label:    'Needs more light',
+                        done:     (interaction.lastMoved || 0) > this.mountedAt,
+                    });
+                }
+                if (illuminanceStatus === 'high') {
+                    items.push({
+                        entityId: plant.entityId,
+                        name:     plant.friendlyName,
+                        emoji:    plant.emoji,
+                        action:   'move-shade',
+                        icon:     '🌙',
+                        label:    'Too much light',
+                        done:     (interaction.lastMoved || 0) > this.mountedAt,
+                    });
+                }
+                return items;
+            });
         },
 
-        activeRoomName() {
-            if (!this.activeRoomKey) return 'Plants';
-            return this.haAreas[this.activeRoomKey]?.name || this.activeRoomKey;
+        pendingTodoCount() {
+            return this.todoItems.filter(i => !i.done).length;
         },
 
-        // CSS custom properties to drive the room background colour
+        selectedPlant() {
+            if (!this.selectedPlantId) return null;
+            return this.allPlants.find(p => p.entityId === this.selectedPlantId) || null;
+        },
+
         roomStyle() {
-            const room = this.activeRoom;
+            const room = (this.view === 'detail' && this.selectedPlant)
+                ? (KNOWN_ROOMS[this.selectedPlant.areaId] || DEFAULT_ROOM)
+                : DEFAULT_ROOM;
             return {
                 '--room-wall':   room.wallColour,
                 '--room-floor':  room.floorColour,
                 '--room-accent': room.accentColour,
             };
         },
-
-        plantsInRoom() {
-            if (!this.activeRoomKey) return this.allPlants;
-            return this.allPlants.filter(p => p.areaId === this.activeRoomKey);
-        },
-    },
-
-    watch: {
-        // When plants load (HA connects), pick the first occupied room if current
-        // selection is no longer valid
-        occupiedRooms(rooms) {
-            if (rooms.length > 0 && !rooms.find(r => r.areaId === this.activeRoomKey)) {
-                this.activeRoomKey = rooms[0].areaId;
-            }
-        },
     },
 
     methods: {
+        openPlant(entityId) {
+            this.selectedPlantId = entityId;
+            this.view = 'detail';
+        },
+
+        closePlant() {
+            this.view = 'list';
+            this.selectedPlantId = null;
+        },
+
+        plantStatusClass(entityId) {
+            const state = this.plantStates[entityId]?.state;
+            if (state === 'ok')      return 'status-ok';
+            if (state === 'problem') return 'status-problem';
+            return 'status-unknown';
+        },
+
         // Wraps canPetPlant so the template tracks timeNow for cooldown re-evaluation
         isPettable(entityId) {
             this.timeNow; // reactive dependency — re-evaluated every 5 s
@@ -338,7 +535,6 @@ export default {
             petPlant(entityId);
         },
 
-        // Returns a CSS colour string for a sensor reading.
         sensorColour(entityId, key) {
             if (key === 'illuminance' && !this.sunAboveHorizon) return '#606080';
             return ASSESS_COLOUR[assessSensor(entityId, key)] || ASSESS_COLOUR.unknown;
@@ -359,34 +555,20 @@ export default {
             clearTimeout(this._toastTimeout);
             this._toastTimeout = setTimeout(() => { this.toastShown = false; }, 2500);
         },
-
-        selectRoom(key) {
-            this.activeRoomKey = key;
-            this.showRoomPicker = false;
-        },
     },
 
     mounted() {
-        // Auto-connect to HA if credentials are already saved
         if (this.isConfigured) connectToHA();
+        this.mountedAt = Date.now();
 
-        // Set initial room
-        if (this.occupiedRooms.length > 0) {
-            this.activeRoomKey = this.occupiedRooms[0].areaId;
-        }
-
-        // Tick every 5 s to refresh pet-button cooldown state
         this._tick = setInterval(() => { this.timeNow = Date.now(); }, 5000);
 
-        // Listen for automated coin rewards from plantData.mjs
         this._onWatered = ({ entityId, coins }) => {
-            const name = this.plantStates[entityId]?.attributes?.friendly_name
-                      || entityId;
+            const name = this.plantStates[entityId]?.attributes?.friendly_name || entityId;
             this.showToast(`💧 ${name} watered! +${coins}`);
         };
         this._onMoved = ({ entityId, coins, inSun }) => {
-            const name = this.plantStates[entityId]?.attributes?.friendly_name
-                      || entityId;
+            const name = this.plantStates[entityId]?.attributes?.friendly_name || entityId;
             this.showToast(`${inSun ? '☀️' : '🌙'} ${name} moved! +${coins}`);
         };
         events.addListener('plant-watered', this._onWatered);
@@ -404,111 +586,166 @@ export default {
     template: /* html */`
     <div class="${styles}" :style="roomStyle">
 
-        <!-- Room picker overlay -->
-        <div v-if="showRoomPicker" class="room-picker-overlay">
-            <p class="room-picker-title">Pick a room</p>
-            <RetroButton
-                v-for="room in occupiedRooms"
-                :key="room.areaId"
-                class="room-btn"
-                :variant="room.areaId === activeRoomKey ? 'success' : 'info'"
-                @click="selectRoom(room.areaId)"
-            >{{ room.name }}</RetroButton>
-            <RetroButton class="room-btn" variant="danger" @click="showRoomPicker = false">Close</RetroButton>
-        </div>
+        <!-- ══════════════ LIST VIEW ══════════════ -->
+        <template v-if="view === 'list'">
 
-        <!-- Header -->
-        <div class="header">
-            <button class="nav-btn" @click="router.goTo('EarnCoins')">←</button>
-            <span class="room-label">🌿 {{ activeRoomName }}</span>
-            <button class="nav-btn" @click="showRoomPicker = true" :disabled="occupiedRooms.length < 2">🗺</button>
-        </div>
-
-        <!-- Offline / error strip -->
-        <div v-if="isConfigured && !haAvailable" class="status-strip">
-            {{ haError || 'Connecting to Home Assistant…' }}
-            <br>Watering and move rewards need your home network
-        </div>
-
-        <!-- Plant list -->
-        <div class="plants-list">
-
-            <!-- HA setup prompt -->
-            <div v-if="!isConfigured" class="ha-setup">
-                <p>Connect Home Assistant for live sensor data and automatic coin rewards</p>
-                <div class="ha-setup-form">
-                    <MinimalInput label="HA URL" v-model="haUrl" type="url" />
-                    <MinimalInput label="Access token" v-model="haToken" type="password" />
-                </div>
-                <RetroButton class="ha-connect-btn" variant="info" @click="connectToHA()">Connect</RetroButton>
+            <div class="header">
+                <button class="nav-btn" @click="router.goTo('EarnCoins')">←</button>
+                <span class="page-title">🌿 Plants</span>
+                <button class="nav-btn" @click="showTodo = true" :disabled="!isConfigured && allPlants.length === 0">
+                    📋
+                    <span v-if="pendingTodoCount > 0" class="todo-badge">{{ pendingTodoCount }}</span>
+                </button>
             </div>
 
-            <!-- Empty state -->
-            <p v-if="plantsInRoom.length === 0 && (hasLiveData || cachedPlants.length > 0)" class="empty-room">
-                No plants in {{ activeRoomName }}
-            </p>
-            <p v-else-if="plantsInRoom.length === 0 && !isConfigured" class="empty-room">
-                Connect to Home Assistant to see your plants
-            </p>
+            <div v-if="isConfigured && !haAvailable" class="status-strip">
+                {{ haError || 'Connecting to Home Assistant…' }}
+                <br>Watering and move rewards need your home network
+            </div>
 
-            <!-- Plant cards -->
-            <div v-for="plant in plantsInRoom" :key="plant.entityId" class="plant-card">
+            <div class="plants-scroll">
 
-                <!-- Name + sun indicator -->
-                <div class="plant-head">
-                    <div class="plant-name">
-                        <span>{{ plant.emoji }}</span>
-                        <span>{{ plant.friendlyName }}</span>
-                    </div>
-                    <span v-if="plant.hasMovedBefore" class="sun-indicator">
-                        {{ plant.inSun ? '🌞' : '🌙' }}
-                    </span>
+                <!-- HA setup prompt -->
+                <div v-if="!isConfigured" class="ha-setup">
+                    <p>Connect Home Assistant for live sensor data and automatic coin rewards</p>
+                    <MinimalInput label="HA URL" v-model="haUrl" type="url" />
+                    <MinimalInput label="Access token" v-model="haToken" type="password" />
+                    <RetroButton class="ha-connect-btn" variant="info" @click="connectToHA()">Connect</RetroButton>
                 </div>
 
-                <!-- Sensor readings (only when live HA data is available) -->
-                <div v-if="hasLiveData" class="sensors">
-                    <div v-if="plant.moisture !== null" class="sensor-row">
+                <!-- Waiting -->
+                <p v-else-if="allPlants.length === 0" class="empty-state">
+                    {{ haAvailable ? 'No plants found' : 'Connecting…' }}
+                </p>
+
+                <!-- Room sections -->
+                <div v-for="room in plantsByRoom" :key="room.areaId || 'unknown'" class="room-section">
+                    <div class="room-header">{{ room.name }}</div>
+                    <div class="plant-grid">
+                        <div
+                            v-for="plant in room.plants"
+                            :key="plant.entityId"
+                            class="plant-card"
+                            @click="openPlant(plant.entityId)"
+                        >
+                            <span class="card-emoji">{{ plant.emoji }}</span>
+                            <span class="card-name">{{ plant.friendlyName }}</span>
+                            <span class="card-status" :class="plantStatusClass(plant.entityId)"></span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </template>
+
+        <!-- ══════════════ DETAIL VIEW ══════════════ -->
+        <template v-else-if="view === 'detail' && selectedPlant">
+
+            <div class="header">
+                <button class="nav-btn" @click="closePlant()">←</button>
+                <span class="page-title">{{ selectedPlant.friendlyName }}</span>
+                <span class="header-emoji">{{ selectedPlant.emoji }}</span>
+            </div>
+
+            <div class="detail-scroll">
+
+                <div class="detail-hero">
+                    <span class="hero-emoji">{{ selectedPlant.emoji }}</span>
+                </div>
+
+                <!-- Sensor readings -->
+                <div v-if="hasLiveData" class="sensor-section">
+                    <div v-if="selectedPlant.moisture !== null" class="sensor-row">
                         <span class="sensor-icon">💧</span>
-                        <span :style="{ color: sensorColour(plant.entityId, 'moisture') }">
-                            {{ formatSensor(plant.moisture, 'moisture') }}
+                        <span class="sensor-label">Moisture</span>
+                        <span class="sensor-value" :style="{ color: sensorColour(selectedPlant.entityId, 'moisture') }">
+                            {{ formatSensor(selectedPlant.moisture, 'moisture') }}
                         </span>
                     </div>
-                    <div v-if="plant.illuminance !== null" class="sensor-row">
-                        <span class="sensor-icon">{{ sunAboveHorizon ? '☀️' : '🌙' }}</span>
-                        <span :style="{ color: sensorColour(plant.entityId, 'illuminance') }">
-                            {{ formatSensor(plant.illuminance, 'illuminance') }}
-                        </span>
-                        <span v-if="!sunAboveHorizon" class="sensor-night">night</span>
-                    </div>
-                    <div v-if="plant.temperature !== null" class="sensor-row">
+                    <div v-if="selectedPlant.temperature !== null" class="sensor-row">
                         <span class="sensor-icon">🌡</span>
-                        <span :style="{ color: sensorColour(plant.entityId, 'temperature') }">
-                            {{ formatSensor(plant.temperature, 'temperature') }}
+                        <span class="sensor-label">Temperature</span>
+                        <span class="sensor-value" :style="{ color: sensorColour(selectedPlant.entityId, 'temperature') }">
+                            {{ formatSensor(selectedPlant.temperature, 'temperature') }}
                         </span>
                     </div>
-                    <div v-if="plant.conductivity !== null" class="sensor-row">
+                    <div v-if="selectedPlant.illuminance !== null" class="sensor-row">
+                        <span class="sensor-icon">{{ sunAboveHorizon ? '☀️' : '🌙' }}</span>
+                        <span class="sensor-label">Light</span>
+                        <span class="sensor-value" :style="{ color: sensorColour(selectedPlant.entityId, 'illuminance') }">
+                            {{ formatSensor(selectedPlant.illuminance, 'illuminance') }}
+                        </span>
+                    </div>
+                    <div v-if="selectedPlant.conductivity !== null" class="sensor-row">
                         <span class="sensor-icon">🧪</span>
-                        <span :style="{ color: sensorColour(plant.entityId, 'conductivity') }">
-                            {{ formatSensor(plant.conductivity, 'conductivity') }}
+                        <span class="sensor-label">Conductivity</span>
+                        <span class="sensor-value" :style="{ color: sensorColour(selectedPlant.entityId, 'conductivity') }">
+                            {{ formatSensor(selectedPlant.conductivity, 'conductivity') }}
                         </span>
                     </div>
+                    <p v-if="selectedPlant.moisture === null && selectedPlant.illuminance === null && selectedPlant.temperature === null" class="no-sensors">
+                        No sensor data
+                    </p>
                 </div>
                 <p v-else-if="isConfigured" class="no-sensors">Awaiting sensor data…</p>
 
-                <!-- Pet button -->
-                <div class="pet-row">
+                <div v-if="selectedPlant.hasMovedBefore" class="sun-row">
+                    Currently {{ selectedPlant.inSun ? 'in sun 🌞' : 'in shade 🌙' }}
+                </div>
+
+                <div class="pet-section">
                     <RetroButton
                         class="pet-btn"
                         variant="warning"
-                        :class="{ 'faux-disabled': !isPettable(plant.entityId) }"
-                        @click="handlePet(plant.entityId)"
-                    >🤚 +2</RetroButton>
+                        :class="{ 'faux-disabled': !isPettable(selectedPlant.entityId) }"
+                        @click="handlePet(selectedPlant.entityId)"
+                    >🤚 Pet +2</RetroButton>
                 </div>
+
+            </div>
+        </template>
+
+        <!-- ══════════════ TODO OVERLAY ══════════════ -->
+        <div v-if="showTodo" class="todo-overlay" @click.self="showTodo = false">
+            <div class="todo-panel">
+
+                <div class="todo-header">
+                    <span class="todo-title">What needs doing?</span>
+                    <button class="todo-close-btn" @click="showTodo = false">✕</button>
+                </div>
+
+                <div class="todo-body">
+                    <p v-if="!isConfigured" class="todo-empty">
+                        Connect to Home Assistant to see what your plants need
+                    </p>
+                    <p v-else-if="!hasLiveData" class="todo-empty">
+                        Connecting to Home Assistant…
+                    </p>
+                    <p v-else-if="todoItems.length === 0" class="todo-empty">
+                        All good! 🌱 Nothing to do right now.
+                    </p>
+                    <div
+                        v-for="item in todoItems"
+                        :key="item.entityId + item.action"
+                        class="todo-item"
+                        :class="{ 'todo-done': item.done }"
+                        @click="openPlant(item.entityId); showTodo = false"
+                    >
+                        <span class="todo-plant-emoji">{{ item.emoji }}</span>
+                        <div class="todo-info">
+                            <span class="todo-plant-name">{{ item.name }}</span>
+                            <span class="todo-action-label">{{ item.icon }} {{ item.label }}</span>
+                        </div>
+                        <span class="todo-check">{{ item.done ? '✓' : '' }}</span>
+                    </div>
+                </div>
+
             </div>
         </div>
 
         <!-- Coin reward toast -->
         <RetroToast class="toast" :show="toastShown" position="bottom">{{ toastText }}</RetroToast>
+
     </div>
     `,
 }

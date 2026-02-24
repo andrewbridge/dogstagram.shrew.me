@@ -15,6 +15,19 @@ persistRef(plantInteractions, 'DOGSTAGRAM_PLANT_INTERACTIONS', true);
 export const cachedPlants = ref([]);
 persistRef(cachedPlants, 'DOGSTAGRAM_CACHED_PLANTS', true);
 
+// In-memory illuminance baselines — derived from 3-day HA history, not persisted.
+// { [plantEntityId]: median daytime lux }
+const illuminanceBaselines = new Map();
+
+// Hours (local time) used to filter out night readings when computing the baseline.
+const DAYTIME_START_HOUR = 9;
+const DAYTIME_END_HOUR   = 17;
+
+// A plant is considered "in low light" when its median daytime lux is below this.
+const ILLUMINANCE_LOW_THRESHOLD = 200;
+// A reading above this triggers "moved into sun" (when baseline is low).
+const ILLUMINANCE_HIGH_READING  = 500;
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function getPlantData(entityId) {
@@ -65,23 +78,68 @@ function movePlant(entityId, haTimestamp, newInSun) {
     events.emit('plant-moved', { entityId, coins: 30, inSun: newInSun });
 }
 
+// ── Need-check helpers ────────────────────────────────────────────────────────
+// These use the threshold attributes (min_*/max_*) set by the HA Plant integration
+// (populated via OpenPlantbook) to confirm the plant actually needed the action.
+
+function plantNeededWater(entityId, oldMoisture) {
+    const attrs = plantStates.value[entityId]?.attributes;
+    const min = parseFloat(attrs?.min_moisture);
+    if (isNaN(min)) return false;
+    // Also credit if moisture was within the bottom 20% of the healthy range (approaching dry)
+    const max = parseFloat(attrs?.max_moisture);
+    const threshold = isNaN(max) ? min : min + 0.2 * (max - min);
+    return oldMoisture < threshold;
+}
+
+function plantNeededMoreLight(entityId, oldIlluminance) {
+    const min = parseFloat(plantStates.value[entityId]?.attributes?.min_illuminance);
+    return !isNaN(min) && oldIlluminance < min;
+}
+
+function plantHadTooMuchLight(entityId, oldIlluminance) {
+    const max = parseFloat(plantStates.value[entityId]?.attributes?.max_illuminance);
+    return !isNaN(max) && oldIlluminance > max;
+}
+
 // ── Delta detection ───────────────────────────────────────────────────────────
 
 function processMoistureDelta(entityId, oldValue, newValue, haTimestamp) {
     if (oldValue === null || newValue === null) return;
     const delta = newValue - oldValue;
-    if (delta >= 15) waterPlant(entityId, haTimestamp);
+    if (delta >= 15 && plantNeededWater(entityId, oldValue)) waterPlant(entityId, haTimestamp);
+}
+
+function computeIlluminanceBaseline(plantId, sortedEntries) {
+    const daytimeValues = sortedEntries
+        .map(e => ({ value: parseFloat(e.s), hour: new Date((e.lu ?? 0) * 1000).getHours() }))
+        .filter(({ value, hour }) =>
+            !isNaN(value) && value >= 0 &&
+            hour >= DAYTIME_START_HOUR && hour < DAYTIME_END_HOUR
+        )
+        .map(({ value }) => value);
+
+    if (daytimeValues.length < 5) return;
+    daytimeValues.sort((a, b) => a - b);
+    illuminanceBaselines.set(plantId, daytimeValues[Math.floor(daytimeValues.length / 2)]);
 }
 
 function processIlluminanceDelta(entityId, oldValue, newValue, haTimestamp) {
     if (oldValue === null || newValue === null) return;
-    const delta = Math.abs(newValue - oldValue);
-    const ratio = oldValue > 0 ? newValue / oldValue : (newValue > 0 ? Infinity : 1);
-    const reverseRatio = newValue > 0 ? oldValue / newValue : (oldValue > 0 ? Infinity : 1);
-    if (delta >= 500 || ratio >= 3 || reverseRatio >= 3) {
-        const inSun = newValue > oldValue;
-        movePlant(entityId, haTimestamp, inSun);
-    }
+    const baseline = illuminanceBaselines.get(entityId);
+    if (baseline === undefined) return; // no baseline yet — skip
+
+    const wasInLowLight  = baseline < ILLUMINANCE_LOW_THRESHOLD;
+    const nowInHighLight = newValue >= ILLUMINANCE_HIGH_READING;
+    const nowInLowLight  = newValue < ILLUMINANCE_LOW_THRESHOLD / 2;
+
+    const movedToSun   = wasInLowLight  && nowInHighLight && plantNeededMoreLight(entityId, baseline);
+    const movedFromSun = !wasInLowLight && nowInLowLight  && plantHadTooMuchLight(entityId, baseline);
+
+    if (!movedToSun && !movedFromSun) return;
+    movePlant(entityId, haTimestamp, movedToSun);
+    // Update baseline so subsequent readings don't re-trigger the same move
+    illuminanceBaselines.set(entityId, newValue);
 }
 
 // ── Real-time event subscription ──────────────────────────────────────────────
@@ -97,7 +155,16 @@ haEvents.addListener('sensor_changed', ({ plantId, sensorType, oldValue, newValu
 // ── Catch-up history processing ───────────────────────────────────────────────
 
 haEvents.addListener('history', ({ historyData, sensorToPlant }) => {
-    // Process each entity's history chronologically
+    // Pass 1: compute per-plant illuminance baselines before processing deltas
+    for (const [sensorEntityId, entries] of Object.entries(historyData)) {
+        if (!entries || entries.length < 5) continue;
+        const sensorMeta = sensorToPlant[sensorEntityId];
+        if (!sensorMeta || sensorMeta.sensorType !== 'illuminance') continue;
+        const sorted = [...entries].sort((a, b) => (a.lu ?? 0) - (b.lu ?? 0));
+        computeIlluminanceBaseline(sensorMeta.plantId, sorted);
+    }
+
+    // Pass 2: process each entity's history chronologically
     for (const [entityId, entries] of Object.entries(historyData)) {
         if (!entries || entries.length < 2) continue;
 

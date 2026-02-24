@@ -250,11 +250,11 @@ export function connectToHA() {
             const allSensorIds = Object.values(linkedSensorIds.value).flat();
             if (allSensorIds.length > 0) {
                 const now = new Date();
-                const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
                 const historyRes = await sendWithResponse({
                     id: nextId(),
                     type: 'history/history_during_period',
-                    start_time: yesterday.toISOString(),
+                    start_time: threeDaysAgo.toISOString(),
                     end_time: now.toISOString(),
                     entity_ids: allSensorIds,
                     significant_changes_only: false,

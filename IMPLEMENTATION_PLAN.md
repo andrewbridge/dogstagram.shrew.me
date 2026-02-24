@@ -33,6 +33,8 @@ Static mapping data — no runtime dependencies.
 ### `src/services/homeAssistant.mjs`
 All Home Assistant communication. Local network only — if the URL is unreachable the app continues without sensor data.
 
+> **Setup context:** Plant sensors use the **Xiaomi BLE** integration, which creates individual `sensor.*` entities (moisture, temperature, illuminance, conductivity). These are linked into `plant.*` helper entities via the **new HA Plant integration (2024+ UI-based)**. All WebSocket message formats below have been validated against the live API.
+
 **Persisted config (localStorage):**
 - `haUrl` — e.g. `http://192.168.1.x:8123`
 - `haToken` — long-lived access token
@@ -46,20 +48,29 @@ All Home Assistant communication. Local network only — if the URL is unreachab
 **Reactive data:**
 - `plantStates` — `{ [entityId]: HA state object }` — live, updated in real time
 - `plantAreaNames` — `{ [entityId]: area name string }` — resolved from HA registries
+- `linkedSensorIds` — `{ [plantEntityId]: string[] }` — `sensor.*` entity IDs that share the same `device_id` as each plant entity, resolved from entity registry. Used as a fallback subscription target if `plant.*` attributes don't include sensor readings.
 
 **Connection flow:**
 1. Open WebSocket to `ws://<haUrl>/api/websocket`
 2. Respond to `auth_required` with `{ type: "auth", access_token }`
 3. On `auth_ok`: in parallel, send:
    - `get_states` — all current entity states
-   - `config/entity_registry/list` — entity → area_id mapping
-   - `config/area_registry/list` — area_id → area name mapping
-4. Filter states for `plant.*` entities; populate `plantStates` and `plantAreaNames`
+   - `config/entity_registry/list` — entity → `{ area_id, device_id }` mapping
+   - `config/area_registry/list` — `area_id` → area name mapping
+4. When all three responses received:
+   - Build `areaIdToName` map from area registry
+   - Build `entityToAreaId` map from entity registry
+   - Build `deviceToEntities` map (`device_id` → `[entity_id, ...]`) from entity registry
+   - Filter `plant.*` from `get_states` → `plantStates`
+   - For each plant entity: look up `area_id` → resolve area name → `plantAreaNames`
+   - For each plant entity: find `device_id` via entity registry; collect all `sensor.*` entities sharing that `device_id` → `linkedSensorIds`
 5. Send `history/history_during_period` for all plant entities, 24h window (see catch-up section)
 6. Subscribe to `state_changed` events for live updates
 7. Auto-reconnect after 10 s on disconnect
 
-**Exports:** `connectToHA()`, `disconnectFromHA()`, `isHaConfigured()`
+> **`state_changed` event behaviour:** HA fires `state_changed` whenever `last_updated` changes — including attribute-only updates, not just `ok`↔`problem` transitions. Since the new Plant integration mirrors linked sensor readings into plant entity attributes, subscribing to `plant.*` entities alone is sufficient for moisture/illuminance delta detection. If plant entity attributes are missing sensor values (verify via HA Developer Tools → States), fall back to subscribing to the `linkedSensorIds` sensor entities instead.
+
+**Exports:** `connectToHA()`, `disconnectFromHA()`, `isHaConfigured()`, `haEvents` (EventBus), `plantStates`, `plantAreaNames`, `linkedSensorIds`, `haConnected`, `haAvailable`, `haError`, `haUrl`, `haToken`, `plantbookUrl`
 
 **OpenPlantbook stub:**
 ```js
@@ -86,7 +97,7 @@ Game state layer. Handles coin logic, sensor-change detection, and persistence.
 - On each `state_changed` event, compare incoming attributes against the previous snapshot held in memory
 - If moisture delta ≥ threshold → `waterPlant(entityId, eventTimestamp)`
 - If lux delta ≥ threshold → `movePlant(entityId, eventTimestamp)` + toggle `inSun`
-- Uses `new_state.last_changed` as event timestamp (not `Date.now()`)
+- Uses `new_state.last_changed` as event timestamp (not `Date.now()`). This is an ISO 8601 string (e.g. `"2026-02-24T10:30:45.123456+00:00"`); ISO 8601 sorts lexicographically so string comparison (`>`) is sufficient for deduplication in `*At` fields.
 
 **Catch-up on connect:**
 - After bootstrap, process the 24h history response chronologically per entity
@@ -97,7 +108,7 @@ Game state layer. Handles coin logic, sensor-change detection, and persistence.
 
 **Sensor assessment:**
 - `assessSensor(entityId, key)` → `'good' | 'warn' | 'bad' | 'unknown'`
-- Uses HA's built-in `min_<sensor>` / `max_<sensor>` attributes when present (set by the HA Plant integration)
+- Uses HA's built-in `min_<sensor>` / `max_<sensor>` attributes when present (set by the HA Plant integration). For the new UI Plant integration, threshold attribute keys are `min_moisture`, `max_moisture`, `min_temperature`, `max_temperature`, `min_illuminance`, `max_illuminance`, `min_conductivity`, `max_conductivity`.
 - Returns `'unknown'` when no range data is available (see OpenPlantbook section)
 
 ### `src/pages/EarnCoins.mjs`
@@ -139,6 +150,25 @@ Main plant game page.
 - Appear automatically when watering or move coins are awarded (real-time or catch-up)
 - e.g. "💧 Watered! +20" / "☀️ Moved to shade! +30"
 - Uses existing `RetroToast` component
+
+### `src/ha-test.html` + `src/ha-test.mjs` (developer validation tool)
+
+A minimal standalone test page to verify the HA WebSocket connection and live sensor updates before building the full game UI. Follows the same pattern as `src/wof.html` / `src/wof.mjs`. **Never linked from the main app.**
+
+`ha-test.html`: copy the import map from `index.html`; load `ha-test.mjs` as module entry.
+
+`ha-test.mjs`: minimal Vue 3 app showing:
+- HA URL + token input fields (bound directly to the exported refs from `homeAssistant.mjs`)
+- Connect button → calls `connectToHA()`
+- Connection status badge
+- Live table of all `plant.*` entities: entity_id | area | state | moisture | illuminance | temperature | conductivity
+- Rows highlight green for 2 s on any attribute change (proves `state_changed` events fire)
+
+**Validation checklist before continuing to `plantData.mjs`:**
+1. Connection succeeds; `haConnected` flips true
+2. Plant entities appear with area names resolved
+3. Watering a plant → moisture value updates within ~30 s, row highlights green
+4. If moisture is absent from plant attributes → check `linkedSensorIds` and adjust `homeAssistant.mjs` to also subscribe to linked sensor entities before proceeding
 
 ---
 

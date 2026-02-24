@@ -4,6 +4,8 @@ import Home from "../pages/Home.mjs";
 import Setup from "../pages/Setup.mjs";
 import SplashScreen from "../pages/SplashScreen.mjs";
 import Feed from "../pages/Feed.mjs";
+import EarnCoins from "../pages/EarnCoins.mjs";
+import Plants from "../pages/Plants.mjs";
 
 const defaultRoute = '/';
 const defaultPath = '#' + defaultRoute;
@@ -12,6 +14,8 @@ export const routes = {
     '/setup': Setup,
     '/home': Home,
     '/feed': Feed,
+    '/earn-coins': EarnCoins,
+    '/plants': Plants,
 };
 
 const compiledRoutes = Object.entries(routes).map(([spec, component]) => ({ route: new Route(spec), spec, component }));

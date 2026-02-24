@@ -10,8 +10,6 @@ persistRef(haUrl, 'DOGSTAGRAM_HA_URL', true);
 export const haToken = ref('');
 persistRef(haToken, 'DOGSTAGRAM_HA_TOKEN', true);
 
-export const plantbookUrl = ref('');
-persistRef(plantbookUrl, 'DOGSTAGRAM_PLANTBOOK_URL', true);
 
 // ── Reactive state ────────────────────────────────────────────────────────────
 
@@ -23,8 +21,11 @@ export const haError = ref('');
 // state object shape: { entity_id: deviceId, state: null, attributes: { friendly_name, ...thresholds } }
 export const plantStates = ref({});
 
-// { [deviceId]: area name string }
-export const plantAreaNames = ref({});
+// { [deviceId]: HA area_id string }
+export const plantAreaIds = ref({});
+
+// { [area_id]: { name: string, aliases: string[] } } — full area registry from HA
+export const haAreas = ref({});
 
 // { [deviceId]: string[] } — linked sensor.* entity IDs for this plant device
 export const linkedSensorIds = ref({});
@@ -99,33 +100,31 @@ function classifySensorType(sensorEntityId, sensorState) {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 function bootstrap(statesResult, entityRegistryResult, areaRegistryResult, deviceRegistryResult) {
-    // Area lookup: area_id → human-readable name
-    const areaIdToName = {};
+    // Area registry: area_id → { name, aliases }
+    const newHaAreas = {};
     for (const area of areaRegistryResult) {
-        areaIdToName[area.area_id] = area.name;
+        newHaAreas[area.area_id] = { name: area.name, aliases: area.aliases || [] };
     }
+    haAreas.value = newHaAreas;
 
-    // Device lookup: device_id → { name, area_id }
+    // Device lookup: device_id → { area_id }
     const deviceById = {};
     for (const device of deviceRegistryResult) {
-        deviceById[device.id] = {
-            name: device.name_by_user || device.name || device.id,
-            area_id: device.area_id || null,
-        };
+        deviceById[device.id] = { area_id: device.area_id || null };
     }
 
-    // Entity registry: group sensor entities by device_id
-    const sensorsByDevice = {};  // device_id → [entity_id, ...]
-    const entityAreaOverride = {}; // entity_id → area_id (entity-level override)
+    // Entity registry: entity_id → device_id; sensor entities grouped by device_id
+    const deviceByEntityId = {};   // entity_id → device_id
+    const entityAreaById = {};     // entity_id → area_id (entity-level override)
+    const sensorsByDevice = {};    // device_id → [sensor entity_id, ...]
 
     for (const entry of entityRegistryResult) {
         if (!entry.device_id) continue;
-        entityAreaOverride[entry.entity_id] = entry.area_id || null;
+        deviceByEntityId[entry.entity_id] = entry.device_id;
+        entityAreaById[entry.entity_id] = entry.area_id || null;
 
         if (isSensorEntity(entry.entity_id)) {
-            if (!sensorsByDevice[entry.device_id]) {
-                sensorsByDevice[entry.device_id] = [];
-            }
+            if (!sensorsByDevice[entry.device_id]) sensorsByDevice[entry.device_id] = [];
             sensorsByDevice[entry.device_id].push(entry.entity_id);
         }
     }
@@ -140,64 +139,48 @@ function bootstrap(statesResult, entityRegistryResult, areaRegistryResult, devic
     const sunState = stateByEntityId['sun.sun'];
     if (sunState) sunAboveHorizon.value = sunState.state === 'above_horizon';
 
-    // Build plant data from sensor devices
+    // Build plant data from plant.* entities
     const newPlantStates = {};
-    const newPlantAreaNames = {};
+    const newPlantAreaIds = {};
     const newLinkedSensorIds = {};
     const newPlantSensorValues = {};
     const newSensorToPlant = {};
 
-    for (const [deviceId, sensorEntityIds] of Object.entries(sensorsByDevice)) {
-        // Classify all sensors for this device
-        const classified = {};  // sensorType → entityId
+    for (const plantState of statesResult.filter(s => s.entity_id.startsWith('plant.'))) {
+        const entityId = plantState.entity_id;
+        const deviceId = deviceByEntityId[entityId];
+        const device   = deviceId ? deviceById[deviceId] : null;
+
+        // Area: prefer entity-level override, then device-level
+        const areaId = entityAreaById[entityId] || device?.area_id || null;
+
+        // Linked sensors: all sensor.* entities on the same device
+        const sensorEntityIds = deviceId ? (sensorsByDevice[deviceId] || []) : [];
+
+        // Initial sensor values + register sensorToPlant routing
+        const sensorValues = { moisture: null, temperature: null, illuminance: null, conductivity: null };
         for (const sensorId of sensorEntityIds) {
             const sensorState = stateByEntityId[sensorId];
-            const sensorType = classifySensorType(sensorId, sensorState);
-            if (sensorType && !classified[sensorType]) {
-                classified[sensorType] = sensorId;
-            }
-        }
-
-        // Only treat as a plant device if it has moisture or illuminance sensors
-        if (!classified.moisture && !classified.illuminance) continue;
-
-        const device = deviceById[deviceId];
-        if (!device) continue;
-
-        // Area: prefer entity-level area_id on the moisture sensor, then device-level
-        const primarySensorId = classified.moisture || classified.illuminance;
-        const areaId = entityAreaOverride[primarySensorId] || device.area_id;
-        const areaName = areaId ? (areaIdToName[areaId] || null) : null;
-
-        // Build initial sensor values from current sensor states
-        const sensorValues = { moisture: null, temperature: null, illuminance: null, conductivity: null };
-        for (const [sensorType, sensorId] of Object.entries(classified)) {
-            const sensorState = stateByEntityId[sensorId];
-            if (sensorState) {
-                const parsed = parseFloat(sensorState.state);
+            const sensorType  = classifySensorType(sensorId, sensorState);
+            if (!sensorType) continue;
+            if (sensorValues[sensorType] === null) {
+                const parsed = parseFloat(sensorState?.state);
                 if (!isNaN(parsed)) sensorValues[sensorType] = parsed;
             }
-            // Register in sensorToPlant for live event routing
-            newSensorToPlant[sensorId] = { plantId: deviceId, sensorType };
+            newSensorToPlant[sensorId] = { plantId: entityId, sensorType };
         }
 
-        // Synthetic state object (no real plant.* entity, so state is always null)
-        newPlantStates[deviceId] = {
-            entity_id: deviceId,
-            state: null,
-            attributes: { friendly_name: device.name },
-        };
-
-        newPlantAreaNames[deviceId] = areaName;
-        newLinkedSensorIds[deviceId] = sensorEntityIds;
-        newPlantSensorValues[deviceId] = sensorValues;
+        newPlantStates[entityId]       = { entity_id: entityId, state: plantState.state, attributes: plantState.attributes };
+        newPlantAreaIds[entityId]      = areaId;
+        newLinkedSensorIds[entityId]   = sensorEntityIds;
+        newPlantSensorValues[entityId] = sensorValues;
     }
 
-    plantStates.value = newPlantStates;
-    plantAreaNames.value = newPlantAreaNames;
-    linkedSensorIds.value = newLinkedSensorIds;
+    plantStates.value       = newPlantStates;
+    plantAreaIds.value      = newPlantAreaIds;
+    linkedSensorIds.value   = newLinkedSensorIds;
     plantSensorValues.value = newPlantSensorValues;
-    sensorToPlant = newSensorToPlant;
+    sensorToPlant           = newSensorToPlant;
 }
 
 // ── Connection ────────────────────────────────────────────────────────────────
@@ -208,11 +191,14 @@ export function isHaConfigured() {
 
 export function connectToHA() {
     if (!isHaConfigured()) return;
+    // Don't restart if a connection is already in progress or established
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
 
     intentionalClose = false;
     if (ws) ws.close();
 
     haConnected.value = false;
+    haAvailable.value = false;
     haError.value = '';
 
     ws = new WebSocket(buildWsUrl(haUrl.value));
@@ -300,6 +286,14 @@ export function connectToHA() {
                 sunAboveHorizon.value = new_state?.state === 'above_horizon';
             }
 
+            // Plant entity update → refresh status attributes in plantStates
+            if (entity_id.startsWith('plant.') && plantStates.value[entity_id] && new_state) {
+                plantStates.value = {
+                    ...plantStates.value,
+                    [entity_id]: { entity_id, state: new_state.state, attributes: new_state.attributes || {} },
+                };
+            }
+
             if (isSensorEntity(entity_id) && sensorToPlant[entity_id]) {
                 const { plantId, sensorType } = sensorToPlant[entity_id];
                 const newValue = new_state ? parseFloat(new_state.state) : NaN;
@@ -352,15 +346,3 @@ export function disconnectFromHA() {
     haConnected.value = false;
 }
 
-// ── OpenPlantbook stub ────────────────────────────────────────────────────────
-
-export async function fetchPlantbookRanges(speciesName) {
-    if (!plantbookUrl.value) return null;
-    try {
-        const res = await fetch(`${plantbookUrl.value}?species=${encodeURIComponent(speciesName)}`);
-        if (!res.ok) return null;
-        return await res.json();
-    } catch {
-        return null;
-    }
-}

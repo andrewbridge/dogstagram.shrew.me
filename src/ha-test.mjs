@@ -2,11 +2,11 @@ import { createApp, ref, computed } from 'vue';
 import {
     haUrl, haToken,
     haConnected, haAvailable, haError,
-    plantStates, plantAreaNames, linkedSensorIds, plantSensorValues,
+    plantStates, plantAreaIds, haAreas, linkedSensorIds, plantSensorValues,
     sunAboveHorizon, connectToHA, disconnectFromHA,
     haEvents,
 } from './services/homeAssistant.mjs';
-import { resolvePlant } from './constants/plants.mjs';
+import { KNOWN_PLANTS } from './constants/plants.mjs';
 
 // ── OpenPlantbook mock data ────────────────────────────────────────────────────
 // Paste the raw JSON response from OpenPlantbook for each plant PID below.
@@ -264,7 +264,8 @@ const App = {
                 return {
                     entityId:     deviceId,
                     name:         state.attributes?.friendly_name || deviceId,
-                    area:         plantAreaNames.value[deviceId] || '—',
+                    areaId:       plantAreaIds.value[deviceId] || null,
+                    area:         haAreas.value[plantAreaIds.value[deviceId]]?.name || '—',
                     moisture:     sensors.moisture     ?? null,
                     temperature:  sensors.temperature  ?? null,
                     illuminance:  sensors.illuminance  ?? null,
@@ -285,7 +286,7 @@ const App = {
             for (const [plantId, events] of Object.entries(wateringHistory.value)) {
                 const state = plantStates.value[plantId];
                 const name  = state?.attributes?.friendly_name || plantId;
-                const area  = plantAreaNames.value[plantId] || '—';
+                const area  = haAreas.value[plantAreaIds.value[plantId]]?.name || '—';
                 for (const e of events) rows.push({ plantId, name, area, ...e });
             }
             return rows.sort((a, b) => b.at < a.at ? -1 : 1);
@@ -295,7 +296,7 @@ const App = {
         const plantHealth = computed(() => {
             const sunIsUp = sunAboveHorizon.value;
             return plants.value.map(p => {
-                const { openPlantbookPid } = resolvePlant(p.name);
+                const openPlantbookPid = KNOWN_PLANTS[p.entityId]?.openPlantbookPid || null;
                 const raw    = openPlantbookPid ? PLANTBOOK_MOCK[openPlantbookPid] : null;
                 const ranges = mapPbRanges(raw);
 
@@ -364,6 +365,8 @@ const App = {
                     <thead>
                         <tr>
                             <th>Name</th>
+                            <th>Device ID</th>
+                            <th>Area ID</th>
                             <th>Area</th>
                             <th>💧 Moisture</th>
                             <th>🌡 Temp</th>
@@ -375,6 +378,8 @@ const App = {
                     <tbody>
                         <tr v-for="p in plants" :key="p.entityId" :class="{ highlight: !!p.changedAt }">
                             <td>{{ p.name }}</td>
+                            <td><code>{{ p.entityId }}</code></td>
+                            <td><code>{{ p.areaId || '—' }}</code></td>
                             <td>{{ p.area }}</td>
                             <td>{{ p.moisture     !== null ? p.moisture     + '%'      : '—' }}</td>
                             <td>{{ p.temperature  !== null ? p.temperature  + '°'      : '—' }}</td>

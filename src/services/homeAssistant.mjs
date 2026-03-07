@@ -5,8 +5,7 @@ import { readCache, writeCache, isCacheFresh, clearCache, readCacheIDB, writeCac
 
 // ── Persisted config ─────────────────────────────────────────────────────────
 
-export const haUrl = ref('');
-persistRef(haUrl, 'DOGSTAGRAM_HA_URL', true);
+export const haUrl = ref('http://homeassistant.local:8123');
 
 export const haToken = ref('');
 persistRef(haToken, 'DOGSTAGRAM_HA_TOKEN', true);
@@ -64,8 +63,8 @@ const CACHE_KEY_HISTORY    = 'DOGSTAGRAM_HA_SENSOR_HISTORY';
 
 const LS_CACHE_KEYS = [CACHE_KEY_ENTITY_REG, CACHE_KEY_AREA_REG, CACHE_KEY_DEVICE_REG, CACHE_KEY_STATES];
 
-// Clear all caches when HA instance changes
-watch([haUrl, haToken], () => {
+// Clear all caches when HA token changes
+watch(haToken, () => {
     LS_CACHE_KEYS.forEach(clearCache);
     clearCacheIDB(CACHE_KEY_HISTORY);
 });
@@ -242,7 +241,7 @@ function bootstrap(statesResult, entityRegistryResult, areaRegistryResult, devic
 // ── Connection ────────────────────────────────────────────────────────────────
 
 export function isHaConfigured() {
-    return !!(haUrl.value && haToken.value);
+    return !!haToken.value;
 }
 
 export function connectToHA() {

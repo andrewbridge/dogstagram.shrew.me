@@ -6,7 +6,7 @@ import PlantCard from '../components/PlantCard.mjs';
 import PlantDetail from '../components/PlantDetail.mjs';
 import PlantTodoSheet from '../components/PlantTodoSheet.mjs';
 import {
-    haUrl, haToken, haConnected, haAvailable, haHistoryLoaded, haError,
+    haToken, haConnected, haAvailable, haHistoryLoaded, haError,
     plantStates, plantAreaIds, haAreas, plantSensorValues, isRefreshing,
     isHaConfigured, connectToHA, disconnectFromHA, refreshRegistries,
 } from '../services/homeAssistant.mjs';
@@ -135,6 +135,7 @@ const styles = css`
         font-size: 1.4vh;
         text-align: center;
         line-height: 2;
+        z-index: 1;
     }
 
     & .ha-connect-btn { font-size: 1.4vh; }
@@ -181,7 +182,7 @@ export default {
     components: { ClipboardListCheck, RetroButton, RetroToast, MinimalInput, PlantCard, PlantDetail, PlantTodoSheet },
     data: () => ({
         // HA reactive refs (unwrapped via Options API data())
-        haUrl, haToken, haConnected, haAvailable, haHistoryLoaded, haError,
+        haToken, haConnected, haAvailable, haHistoryLoaded, haError,
         plantStates, plantAreaIds, haAreas, plantSensorValues, isRefreshing,
         // Plant data reactive refs
         cachedPlants, plantInteractions,
@@ -402,7 +403,6 @@ export default {
             <!-- HA setup prompt -->
             <div v-if="!isConfigured" class="ha-setup">
                 <p>Connect Home Assistant for live sensor data and automatic coin rewards</p>
-                <MinimalInput label="HA URL" v-model="haUrl" type="url" />
                 <MinimalInput label="Access token" v-model="haToken" type="password" />
                 <RetroButton class="ha-connect-btn" variant="info" @click="connectToHA()">Connect</RetroButton>
             </div>

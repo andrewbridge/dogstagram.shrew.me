@@ -414,7 +414,7 @@ export default {
                         variant="info"
                         :class="{ 'faux-disabled': isRefreshing }"
                         @click="refreshRegistries()"
-                    >Refresh plant data</RetroButton>
+                    >Refresh plant list</RetroButton>
                 </div>
             </template>
         </template>

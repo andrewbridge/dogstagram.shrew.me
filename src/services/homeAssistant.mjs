@@ -1,6 +1,7 @@
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { persistRef } from '../utilities/vue.mjs';
 import EventBus from '../utilities/functions.mjs';
+import { readCache, writeCache, isCacheFresh, clearCache, readCacheIDB, writeCacheIDB, isCacheFreshIDB, clearCacheIDB } from '../utilities/cache.mjs';
 
 // ── Persisted config ─────────────────────────────────────────────────────────
 
@@ -15,7 +16,9 @@ persistRef(haToken, 'DOGSTAGRAM_HA_TOKEN', true);
 
 export const haConnected = ref(false);
 export const haAvailable = ref(false);
+export const haHistoryLoaded = ref(false);
 export const haError = ref('');
+export const isRefreshing = ref(false);
 
 // { [deviceId]: synthetic state object } — "plant ID" is device ID
 // state object shape: { entity_id: deviceId, state: null, attributes: { friendly_name, ...thresholds } }
@@ -33,17 +36,46 @@ export const linkedSensorIds = ref({});
 // { [deviceId]: { moisture, temperature, illuminance, conductivity } }
 export const plantSensorValues = ref({});
 
-// true when sun.sun state is 'above_horizon' — used to suppress illuminance assessment at night
-export const sunAboveHorizon = ref(true);
+// true when sun.sun state is 'above_horizon' — used to suppress illuminance assessment at night.
+// If sun.sun is unavailable, falls back to a rough daytime estimate (7am–8pm local).
+export const sunAboveHorizon = ref(isDaytimeGuess());
+let hasSunEntity = false;
+
+function isDaytimeGuess() {
+    const h = new Date().getHours();
+    return h >= 7 && h < 20;
+}
 
 // EventBus for plantData.mjs to subscribe to HA events
 export const haEvents = new EventBus();
+
+// ── Cache keys & TTLs ────────────────────────────────────────────────────────
+
+const CACHE_KEY_ENTITY_REG = 'DOGSTAGRAM_HA_ENTITY_REGISTRY';
+const CACHE_KEY_AREA_REG   = 'DOGSTAGRAM_HA_AREA_REGISTRY';
+const CACHE_KEY_DEVICE_REG = 'DOGSTAGRAM_HA_DEVICE_REGISTRY';
+const CACHE_KEY_STATES     = 'DOGSTAGRAM_HA_STATES';
+
+const REGISTRY_MAX_AGE = Infinity;        // manual refresh only
+const STATES_MAX_AGE   = 10 * 60 * 1000;  // 10 minutes
+const HISTORY_MAX_AGE  = 5 * 60 * 1000;   // 5 minutes
+
+const CACHE_KEY_HISTORY    = 'DOGSTAGRAM_HA_SENSOR_HISTORY';
+
+const LS_CACHE_KEYS = [CACHE_KEY_ENTITY_REG, CACHE_KEY_AREA_REG, CACHE_KEY_DEVICE_REG, CACHE_KEY_STATES];
+
+// Clear all caches when HA instance changes
+watch([haUrl, haToken], () => {
+    LS_CACHE_KEYS.forEach(clearCache);
+    clearCacheIDB(CACHE_KEY_HISTORY);
+});
 
 // ── Internal state ────────────────────────────────────────────────────────────
 
 let ws = null;
 let msgId = 1;
 let reconnectTimer = null;
+let sunFallbackTimer = null;
 let intentionalClose = false;
 
 const pending = new Map();
@@ -97,6 +129,22 @@ function classifySensorType(sensorEntityId, sensorState) {
     return null;
 }
 
+// ── Cache-aware fetch ────────────────────────────────────────────────────────
+
+async function fetchOrCache(cacheKey, maxAgeMs, wsFetchFn) {
+    if (isCacheFresh(cacheKey, maxAgeMs)) {
+        return readCache(cacheKey).data;
+    }
+    const result = await wsFetchFn();
+    if (result.success) {
+        writeCache(cacheKey, result.result);
+        return result.result;
+    }
+    // Fall back to stale cache if fetch fails
+    const stale = readCache(cacheKey);
+    return stale ? stale.data : null;
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 function bootstrap(statesResult, entityRegistryResult, areaRegistryResult, deviceRegistryResult) {
@@ -137,7 +185,15 @@ function bootstrap(statesResult, entityRegistryResult, areaRegistryResult, devic
 
     // Initialise sun position
     const sunState = stateByEntityId['sun.sun'];
-    if (sunState) sunAboveHorizon.value = sunState.state === 'above_horizon';
+    if (sunState) {
+        hasSunEntity = true;
+        sunAboveHorizon.value = sunState.state === 'above_horizon';
+    } else {
+        hasSunEntity = false;
+        sunAboveHorizon.value = isDaytimeGuess();
+        clearInterval(sunFallbackTimer);
+        sunFallbackTimer = setInterval(() => { sunAboveHorizon.value = isDaytimeGuess(); }, 5 * 60 * 1000);
+    }
 
     // Build plant data from plant.* entities
     const newPlantStates = {};
@@ -199,6 +255,7 @@ export function connectToHA() {
 
     haConnected.value = false;
     haAvailable.value = false;
+    haHistoryLoaded.value = false;
     haError.value = '';
 
     ws = new WebSocket(buildWsUrl(haUrl.value));
@@ -226,46 +283,60 @@ export function connectToHA() {
         if (msg.type === 'auth_ok') {
             haConnected.value = true;
 
-            // Four parallel bootstrap requests
-            const statesId    = nextId();
-            const entityRegId = nextId();
-            const areaRegId   = nextId();
-            const deviceRegId = nextId();
-
-            const [statesRes, entityRegRes, areaRegRes, deviceRegRes] = await Promise.all([
-                sendWithResponse({ id: statesId,    type: 'get_states' }),
-                sendWithResponse({ id: entityRegId, type: 'config/entity_registry/list' }),
-                sendWithResponse({ id: areaRegId,   type: 'config/area_registry/list' }),
-                sendWithResponse({ id: deviceRegId, type: 'config/device_registry/list' }),
+            // Registries: cached aggressively (manual refresh only)
+            // States: cached with 10-minute TTL
+            const [entityRegData, areaRegData, deviceRegData, statesData] = await Promise.all([
+                fetchOrCache(CACHE_KEY_ENTITY_REG, REGISTRY_MAX_AGE, () =>
+                    sendWithResponse({ id: nextId(), type: 'config/entity_registry/list' })),
+                fetchOrCache(CACHE_KEY_AREA_REG, REGISTRY_MAX_AGE, () =>
+                    sendWithResponse({ id: nextId(), type: 'config/area_registry/list' })),
+                fetchOrCache(CACHE_KEY_DEVICE_REG, REGISTRY_MAX_AGE, () =>
+                    sendWithResponse({ id: nextId(), type: 'config/device_registry/list' })),
+                fetchOrCache(CACHE_KEY_STATES, STATES_MAX_AGE, () =>
+                    sendWithResponse({ id: nextId(), type: 'get_states' })),
             ]);
 
-            if (!statesRes.success || !entityRegRes.success || !areaRegRes.success || !deviceRegRes.success) {
+            if (!entityRegData || !areaRegData || !deviceRegData || !statesData) {
                 haError.value = 'Failed to load HA data';
                 return;
             }
 
-            bootstrap(statesRes.result, entityRegRes.result, areaRegRes.result, deviceRegRes.result);
+            bootstrap(statesData, entityRegData, areaRegData, deviceRegData);
 
-            // History for all linked sensor entities (the real readings live there)
-            const allSensorIds = Object.values(linkedSensorIds.value).flat();
-            if (allSensorIds.length > 0) {
-                const now = new Date();
-                const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-                const historyRes = await sendWithResponse({
-                    id: nextId(),
-                    type: 'history/history_during_period',
-                    start_time: threeDaysAgo.toISOString(),
-                    end_time: now.toISOString(),
-                    entity_ids: allSensorIds,
-                    significant_changes_only: false,
-                });
+            // History: cached in IndexedDB with 5-minute TTL (too large for localStorage)
+            try {
+                const allSensorIds = Object.values(linkedSensorIds.value).flat();
+                if (allSensorIds.length > 0) {
+                    let historyData = null;
 
-                if (historyRes.success) {
-                    haEvents.emit('history', { historyData: historyRes.result, sensorToPlant });
+                    if (await isCacheFreshIDB(CACHE_KEY_HISTORY, HISTORY_MAX_AGE)) {
+                        historyData = (await readCacheIDB(CACHE_KEY_HISTORY)).data;
+                    } else {
+                        const historyRes = await sendWithResponse({
+                            id: nextId(),
+                            type: 'history/history_during_period',
+                            start_time: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+                            end_time: new Date().toISOString(),
+                            entity_ids: allSensorIds,
+                            significant_changes_only: false,
+                        });
+                        if (historyRes.success) {
+                            historyData = historyRes.result;
+                            writeCacheIDB(CACHE_KEY_HISTORY, historyData);
+                        }
+                    }
+
+                    if (historyData) {
+                        haEvents.emit('history', { historyData, sensorToPlant });
+                    }
                 }
+            } catch (err) {
+                console.warn('[HA] History fetch/processing failed:', err);
             }
 
+            // Always subscribe for live sensor/plant updates
             send({ id: nextId(), type: 'subscribe_events', event_type: 'state_changed' });
+            haHistoryLoaded.value = true;
             haAvailable.value = true;
             return;
         }
@@ -339,10 +410,60 @@ export function connectToHA() {
 export function disconnectFromHA() {
     intentionalClose = true;
     clearTimeout(reconnectTimer);
+    clearInterval(sunFallbackTimer);
     if (ws) {
         ws.close();
         ws = null;
     }
     haConnected.value = false;
+}
+
+export async function refreshRegistries() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    isRefreshing.value = true;
+
+    // Clear all caches to force fresh fetches
+    LS_CACHE_KEYS.forEach(clearCache);
+    clearCacheIDB(CACHE_KEY_HISTORY);
+
+    try {
+        const [statesRes, entityRegRes, areaRegRes, deviceRegRes] = await Promise.all([
+            sendWithResponse({ id: nextId(), type: 'get_states' }),
+            sendWithResponse({ id: nextId(), type: 'config/entity_registry/list' }),
+            sendWithResponse({ id: nextId(), type: 'config/area_registry/list' }),
+            sendWithResponse({ id: nextId(), type: 'config/device_registry/list' }),
+        ]);
+
+        if (statesRes.success) writeCache(CACHE_KEY_STATES, statesRes.result);
+        if (entityRegRes.success) writeCache(CACHE_KEY_ENTITY_REG, entityRegRes.result);
+        if (areaRegRes.success) writeCache(CACHE_KEY_AREA_REG, areaRegRes.result);
+        if (deviceRegRes.success) writeCache(CACHE_KEY_DEVICE_REG, deviceRegRes.result);
+
+        if (statesRes.success && entityRegRes.success && areaRegRes.success && deviceRegRes.success) {
+            bootstrap(statesRes.result, entityRegRes.result, areaRegRes.result, deviceRegRes.result);
+
+            // Re-fetch history too
+            const allSensorIds = Object.values(linkedSensorIds.value).flat();
+            if (allSensorIds.length > 0) {
+                const now = new Date();
+                const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+                const historyRes = await sendWithResponse({
+                    id: nextId(),
+                    type: 'history/history_during_period',
+                    start_time: threeDaysAgo.toISOString(),
+                    end_time: now.toISOString(),
+                    entity_ids: allSensorIds,
+                    significant_changes_only: false,
+                });
+                if (historyRes.success) {
+                    writeCacheIDB(CACHE_KEY_HISTORY, historyRes.result);
+                    haEvents.emit('history', { historyData: historyRes.result, sensorToPlant });
+                }
+            }
+        }
+    } finally {
+        isRefreshing.value = false;
+    }
 }
 

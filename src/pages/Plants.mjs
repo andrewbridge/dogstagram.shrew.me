@@ -6,15 +6,17 @@ import PlantCard from '../components/PlantCard.mjs';
 import PlantDetail from '../components/PlantDetail.mjs';
 import PlantTodoSheet from '../components/PlantTodoSheet.mjs';
 import {
-    haUrl, haToken, haAvailable, haError,
-    plantStates, plantAreaIds, haAreas, plantSensorValues,
-    isHaConfigured, connectToHA, disconnectFromHA,
+    haUrl, haToken, haConnected, haAvailable, haHistoryLoaded, haError,
+    plantStates, plantAreaIds, haAreas, plantSensorValues, isRefreshing,
+    isHaConfigured, connectToHA, disconnectFromHA, refreshRegistries,
 } from '../services/homeAssistant.mjs';
 import {
-    cachedPlants, plantInteractions,
+    cachedPlants, plantInteractions, assessLight,
 } from '../services/plantData.mjs';
 import { events } from '../services/data.mjs';
 import { KNOWN_PLANTS, DEFAULT_PLANT } from '../constants/plants.mjs';
+import { nameToHue } from '../utilities/colours.mjs';
+import { DEFAULT_HUE } from '../constants/colours.mjs';
 import ClipboardListCheck from '../components/icons/ClipboardListCheck.mjs';
 
 const styles = css`
@@ -28,10 +30,12 @@ const styles = css`
         flex-direction: column;
         height: 100%;
         font-family: "Press Start 2P", cursive;
-        background: rgb(174,229,238);
-        background: radial-gradient(circle, rgba(174,229,238,1) 0%, rgba(174,206,238,1) 100%);
+        background: hsl(calc(var(--plant-hue, ${DEFAULT_HUE}) * 1deg) 65.3% 80.8%);
+        background: radial-gradient(circle,
+            hsl(calc(var(--plant-hue, ${DEFAULT_HUE}) * 1deg) 65.3% 80.8%) 0%,
+            hsl(calc((var(--plant-hue, ${DEFAULT_HUE}) + 12) * 1deg) 65.3% 80.8%) 100%);
         position: relative;
-        overflow: hidden;
+        overflow-y: auto;
     }
 
     &::before {
@@ -54,30 +58,9 @@ const styles = css`
         align-items: flex-start;
         justify-content: space-around;
         padding: 1.5vh 2vh;
-        min-height: 75px;
-        flex-shrink: 0;
+        min-height: 20vh;
         position: relative;
         z-index: 1;
-        &::before, &::after {
-            content: "";
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            box-sizing: content-box;
-            pointer-events: none;
-        }
-        &::before {
-            top: -.5vh;
-            left: 0;
-            border-top: .5vh black solid;
-            border-bottom: .5vh black solid;
-        }
-        &::after {
-            left: -.5vh;
-            top: 0;
-            border-left: .5vh black solid;
-            border-right: .5vh black solid;
-        }
     }
 
     & .nav-btn {
@@ -120,22 +103,23 @@ const styles = css`
         pointer-events: none;
     }
 
-    & .status-strip {
-        background: rgba(0, 0, 0, 0.4);
-        color: rgba(255, 255, 255, 0.75);
-        font-size: 1.3vh;
-        padding: 1.2vh 2vh;
-        text-align: center;
-        flex-shrink: 0;
-        line-height: 2;
-        border-bottom: .4vh solid black;
+    & .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 0.6em;
+        font-size: 0.6em;
+        color: rgba(0, 0, 0, 0.45);
     }
 
-    /* ── List view ── */
-
-    & .plants-scroll {
-        flex-grow: 1;
-        overflow-y: auto;
+    & .status-dot {
+        width: 0.8em;
+        height: 0.8em;
+        border-radius: 50%;
+        border: .15em solid rgba(0, 0, 0, 0.2);
+        flex-shrink: 0;
+        &.dot-connecting { background: #c09030; }
+        &.dot-connected  { background: #60c060; }
+        &.dot-error      { background: #e06060; }
     }
 
     & .ha-setup {
@@ -178,6 +162,16 @@ const styles = css`
         padding: 1.5vh 2vh;
     }
 
+    & .refresh-section {
+        display: flex;
+        justify-content: center;
+        padding: 2vh 2vh 4vh;
+        position: relative;
+        z-index: 1;
+    }
+
+    & .refresh-btn { font-size: 1.2vh; }
+
     & .toast { font-size: 2.5vh; }
 `;
 
@@ -187,8 +181,8 @@ export default {
     components: { ClipboardListCheck, RetroButton, RetroToast, MinimalInput, PlantCard, PlantDetail, PlantTodoSheet },
     data: () => ({
         // HA reactive refs (unwrapped via Options API data())
-        haUrl, haToken, haAvailable, haError,
-        plantStates, plantAreaIds, haAreas, plantSensorValues,
+        haUrl, haToken, haConnected, haAvailable, haHistoryLoaded, haError,
+        plantStates, plantAreaIds, haAreas, plantSensorValues, isRefreshing,
         // Plant data reactive refs
         cachedPlants, plantInteractions,
         // Local UI state
@@ -205,6 +199,21 @@ export default {
 
         hasLiveData() {
             return Object.keys(this.plantStates).length > 0;
+        },
+
+        connectionStatus() {
+            if (!this.isConfigured) return null;
+            if (this.isRefreshing)
+                return { text: 'Refreshing…', dot: 'dot-connecting' };
+            if (this.haError || (!this.haConnected && this.haAvailable))
+                return { text: 'Disconnected', dot: 'dot-error' };
+            if (!this.haConnected)
+                return { text: 'Connecting…', dot: 'dot-connecting' };
+            if (!this.haHistoryLoaded)
+                return { text: 'Loading…', dot: 'dot-connecting' };
+            if (this.haAvailable)
+                return { text: 'Connected', dot: 'dot-connected' };
+            return null;
         },
 
         // Unified plant list: live HA data when available, else persisted cache
@@ -265,8 +274,8 @@ export default {
                 const interaction = this.plantInteractions[plant.entityId] || {};
                 const items       = [];
 
-                const moistureStatus    = attrs.moisture_status?.toLowerCase();
-                const illuminanceStatus = attrs.illuminance_status?.toLowerCase();
+                const moistureStatus = attrs.moisture_status?.toLowerCase();
+                const lightResult    = assessLight(plant.entityId);
 
                 if (moistureStatus === 'low') {
                     items.push({
@@ -279,7 +288,7 @@ export default {
                         done:     (interaction.lastWatered || 0) > this.mountedAt,
                     });
                 }
-                if (illuminanceStatus === 'low') {
+                if (lightResult === 'needs-more-light') {
                     items.push({
                         entityId: plant.entityId,
                         name:     plant.friendlyName,
@@ -290,7 +299,7 @@ export default {
                         done:     (interaction.lastMoved || 0) > this.mountedAt,
                     });
                 }
-                if (illuminanceStatus === 'high') {
+                if (lightResult === 'needs-more-shade') {
                     items.push({
                         entityId: plant.entityId,
                         name:     plant.friendlyName,
@@ -314,6 +323,12 @@ export default {
             return this.allPlants.find(p => p.entityId === this.selectedPlantId) || null;
         },
 
+        pageStyle() {
+            const hue = (this.view === 'detail' && this.selectedPlant)
+                ? nameToHue(this.selectedPlant.friendlyName)
+                : DEFAULT_HUE;
+            return { '--plant-hue': hue };
+        },
     },
 
     methods: {
@@ -366,7 +381,7 @@ export default {
     },
 
     template: /* html */`
-    <div class="${styles}">
+    <div class="${styles}" :style="pageStyle">
 
         <!-- ══════════════ LIST VIEW ══════════════ -->
         <template v-if="view === 'list'">
@@ -374,33 +389,31 @@ export default {
             <div class="header">
                 <button class="nav-btn" @click="router.goTo('EarnCoins')">←</button>
                 <span class="page-title">Plantédex</span>
-                <button class="nav-btn todo-btn" @click="showTodo = true" :disabled="!isConfigured && allPlants.length === 0">
+                <span v-if="connectionStatus" class="connection-status">
+                    <span class="status-dot" :class="connectionStatus.dot"></span>
+                    {{ connectionStatus.text }}
+                </span>
+                <button v-if="pendingTodoCount > 0" class="nav-btn todo-btn" @click="showTodo = true">
                     <ClipboardListCheck />
-                    <span v-if="pendingTodoCount > 0" class="todo-badge">{{ pendingTodoCount }}</span>
+                    <span class="todo-badge">{{ pendingTodoCount }}</span>
                 </button>
             </div>
 
-            <div v-if="isConfigured && !haAvailable" class="status-strip">
-                {{ haError || 'Connecting to Home Assistant…' }}
-                <br>Watering and move rewards need your home network
+            <!-- HA setup prompt -->
+            <div v-if="!isConfigured" class="ha-setup">
+                <p>Connect Home Assistant for live sensor data and automatic coin rewards</p>
+                <MinimalInput label="HA URL" v-model="haUrl" type="url" />
+                <MinimalInput label="Access token" v-model="haToken" type="password" />
+                <RetroButton class="ha-connect-btn" variant="info" @click="connectToHA()">Connect</RetroButton>
             </div>
 
-            <div class="plants-scroll">
+            <!-- Waiting -->
+            <p v-else-if="allPlants.length === 0" class="empty-state">
+                {{ haAvailable ? 'No plants found' : 'Connecting…' }}
+            </p>
 
-                <!-- HA setup prompt -->
-                <div v-if="!isConfigured" class="ha-setup">
-                    <p>Connect Home Assistant for live sensor data and automatic coin rewards</p>
-                    <MinimalInput label="HA URL" v-model="haUrl" type="url" />
-                    <MinimalInput label="Access token" v-model="haToken" type="password" />
-                    <RetroButton class="ha-connect-btn" variant="info" @click="connectToHA()">Connect</RetroButton>
-                </div>
-
-                <!-- Waiting -->
-                <p v-else-if="allPlants.length === 0" class="empty-state">
-                    {{ haAvailable ? 'No plants found' : 'Connecting…' }}
-                </p>
-
-                <!-- Room sections -->
+            <!-- Room sections -->
+            <template v-else>
                 <div v-for="room in plantsByRoom" :key="room.areaId || 'unknown'" class="room-section">
                     <div class="room-header">{{ room.name }}</div>
                     <div class="plant-grid">
@@ -414,8 +427,15 @@ export default {
                         />
                     </div>
                 </div>
-
-            </div>
+                <div class="refresh-section">
+                    <RetroButton
+                        class="refresh-btn"
+                        variant="info"
+                        :class="{ 'faux-disabled': isRefreshing }"
+                        @click="refreshRegistries()"
+                    >Refresh plant data</RetroButton>
+                </div>
+            </template>
         </template>
 
         <!-- ══════════════ DETAIL VIEW ══════════════ -->

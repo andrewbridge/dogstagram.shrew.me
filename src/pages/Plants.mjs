@@ -1,7 +1,7 @@
 import { css } from 'goober';
 import RetroButton from '../components/RetroButton.mjs';
 import RetroToast from '../components/RetroToast.mjs';
-import MinimalInput from '../components/MinimalInput.mjs';
+import HASetupForm from '../components/HASetupForm.mjs';
 import PlantCard from '../components/PlantCard.mjs';
 import PlantDetail from '../components/PlantDetail.mjs';
 import PlantTodoSheet from '../components/PlantTodoSheet.mjs';
@@ -122,21 +122,6 @@ const styles = css`
         &.dot-error      { background: #e06060; }
     }
 
-    & .ha-setup {
-        background: rgba(0, 0, 0, 0.45);
-        border: .4vh solid rgba(0, 0, 0, 0.5);
-        padding: 2vh;
-        margin: 2vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1.5vh;
-        color: white;
-        font-size: 1.4vh;
-        text-align: center;
-        line-height: 2;
-        z-index: 1;
-    }
 
     & .ha-connect-btn { font-size: 1.4vh; }
 
@@ -179,7 +164,7 @@ const styles = css`
 export default {
     name: 'Plants',
     inject: ['router'],
-    components: { ClipboardListCheck, RetroButton, RetroToast, MinimalInput, PlantCard, PlantDetail, PlantTodoSheet },
+    components: { ClipboardListCheck, RetroButton, RetroToast, HASetupForm, PlantCard, PlantDetail, PlantTodoSheet },
     data: () => ({
         // HA reactive refs (unwrapped via Options API data())
         haToken, haConnected, haAvailable, haHistoryLoaded, haError,
@@ -211,7 +196,7 @@ export default {
             if (!this.haConnected)
                 return { text: 'Connecting…', dot: 'dot-connecting' };
             if (!this.haHistoryLoaded)
-                return { text: 'Loading…', dot: 'dot-connecting' };
+                return { text: this.cachedPlants.length > 0 ? 'Updating…' : 'Loading…', dot: 'dot-connecting' };
             if (this.haAvailable)
                 return { text: 'Connected', dot: 'dot-connected' };
             return null;
@@ -401,11 +386,7 @@ export default {
             </div>
 
             <!-- HA setup prompt -->
-            <div v-if="!isConfigured" class="ha-setup">
-                <p>Connect Home Assistant for live sensor data and automatic coin rewards</p>
-                <MinimalInput label="Access token" v-model="haToken" type="password" />
-                <RetroButton class="ha-connect-btn" variant="info" @click="connectToHA()">Connect</RetroButton>
-            </div>
+            <HASetupForm v-if="!isConfigured" />
 
             <!-- Waiting -->
             <p v-else-if="allPlants.length === 0" class="empty-state">

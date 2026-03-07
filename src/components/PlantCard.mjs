@@ -1,21 +1,5 @@
 import { css } from 'goober';
-
-const CARD_HUES = [
-    13,   // red
-    64,  // yellow
-    115,   // green
-    166,  // cyan
-    217,  // blue
-    268,  // purple
-    319,   // magenta
-];
-
-function nameToColour(name) {
-    let h = 0;
-    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-    const hue = CARD_HUES[((h % CARD_HUES.length) + CARD_HUES.length) % CARD_HUES.length];
-    return `hsl(${hue}deg 59% 55.1%)`;
-}
+import { nameToHue } from '../utilities/colours.mjs';
 
 const styles = css`
     & {
@@ -64,7 +48,7 @@ export default {
     },
     emits: ['click'],
     computed: {
-        cardStyle() { return { background: nameToColour(this.name) }; },
+        cardStyle() { return { background: `hsl(${nameToHue(this.name)}deg 59% 55.1%)` }; },
     },
     template: /* html */`
     <div class="${styles}" :style="cardStyle" @click="$emit('click')">

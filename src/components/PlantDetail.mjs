@@ -24,6 +24,15 @@ const styles = css`
         padding: 2vh 0 0;
         margin-bottom: -4vh;
         z-index: 1;
+        cursor: pointer;
+        transition: flex-grow 0.4s ease, padding 0.4s ease, margin-bottom 0.4s ease;
+    }
+
+    &.expanded .detail-hero {
+        flex-grow: 1;
+        padding: 0;
+        margin-bottom: 0;
+        align-items: center;
     }
 
     & .detail-content {
@@ -36,9 +45,29 @@ const styles = css`
         background: #fff;
         border-top-left-radius: 1.5em;
         border-top-right-radius: 1.5em;
+        transition: opacity 0.3s ease, max-height 0.4s ease, padding 0.4s ease;
+        max-height: 100vh;
+        overflow: hidden;
     }
 
-    & .hero-emoji { height: 20vh; /* image-rendering: pixelated; */ }
+    &.expanded .detail-content {
+        opacity: 0;
+        max-height: 0;
+        padding: 0 3vh;
+        pointer-events: none;
+    }
+
+    & .hero-emoji {
+        height: 20vh;
+        transition: height 0.4s ease, width 0.4s ease;
+        object-fit: contain;
+        /* image-rendering: pixelated; */
+    }
+
+    &.expanded .hero-emoji {
+        height: 60vh;
+        width: 100%;
+    }
 
     & .sensor-section {
         display: flex;
@@ -170,6 +199,7 @@ export default {
         sensorHistory,
         timeNow: Date.now(),
         activeTab: 'stats',
+        imageExpanded: false,
     }),
     computed: {
         plantHistory() {
@@ -251,9 +281,9 @@ export default {
         clearInterval(this._tick);
     },
     template: /* html */`
-    <div class="${styles}">
+    <div class="${styles}" :class="{ expanded: imageExpanded }">
 
-        <div class="detail-hero">
+        <div class="detail-hero" @click="imageExpanded = !imageExpanded">
             <img class="hero-emoji" :src="plant.image" :alt="plant.friendlyName" />
         </div>
 

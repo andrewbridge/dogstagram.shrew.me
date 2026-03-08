@@ -5,7 +5,7 @@ import { readCache, writeCache, isCacheFresh, clearCache, readCacheIDB, writeCac
 
 // ── Persisted config ─────────────────────────────────────────────────────────
 
-export const haUrl = ref('http://homeassistant.local:8123');
+export const haUrl = ref('https://ha.andrewhbridge.co.uk');
 
 export const haToken = ref('');
 persistRef(haToken, 'DOGSTAGRAM_HA_TOKEN', true);

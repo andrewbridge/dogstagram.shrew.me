@@ -15,14 +15,15 @@ const styles = css`
         flex-grow: 1;
         display: flex;
         flex-direction: column;
-        gap: 1.5vh;
         font-family: "Press Start 2P", cursive;
     }
 
     & .detail-hero {
         display: flex;
         justify-content: center;
-        padding: 2vh 0 1vh;
+        padding: 2vh 0 0;
+        margin-bottom: -4vh;
+        z-index: 1;
     }
 
     & .detail-content {
@@ -37,7 +38,7 @@ const styles = css`
         border-top-right-radius: 1.5em;
     }
 
-    & .hero-emoji { font-size: 12vh; }
+    & .hero-emoji { height: 20vh; image-rendering: pixelated; }
 
     & .sensor-section {
         display: flex;
@@ -253,7 +254,7 @@ export default {
     <div class="${styles}">
 
         <div class="detail-hero">
-            <span class="hero-emoji">{{ plant.emoji }}</span>
+            <img class="hero-emoji" :src="plant.image" :alt="plant.friendlyName" />
         </div>
 
         <div class="detail-content">

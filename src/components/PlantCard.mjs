@@ -14,7 +14,7 @@ const styles = css`
         &:active { opacity: 0.7; }
     }
 
-    & .card-emoji { font-size: 5vh; }
+    & .card-emoji { height: 8vh; image-rendering: pixelated; }
 
     & .card-name {
         font-size: 1.1vh;
@@ -42,7 +42,7 @@ const styles = css`
 export default {
     name: 'PlantCard',
     props: {
-        emoji:       { type: String, required: true },
+        image:       { type: String, required: true },
         name:        { type: String, required: true },
         statusClass: { type: String, default: 'status-unknown' },
     },
@@ -53,7 +53,7 @@ export default {
     template: /* html */`
     <div class="${styles}" :style="cardStyle" @click="$emit('click')">
         <span class="card-name">{{ name }}</span>
-        <span class="card-emoji">{{ emoji }}</span>
+        <img class="card-emoji" :src="image" :alt="name" />
         <span class="card-status" :class="statusClass"></span>
     </div>
     `,

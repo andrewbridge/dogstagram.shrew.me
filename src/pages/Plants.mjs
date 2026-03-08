@@ -85,7 +85,7 @@ const styles = css`
         font-size: 1.25em;
     }
 
-    & .header-emoji { font-size: 3vh; }
+    & .header-emoji { height: 5vh; image-rendering: pixelated; }
 
     & .todo-badge {
         position: absolute;
@@ -217,14 +217,14 @@ export default {
                 }));
 
             return source.map(({ entityId, friendlyName, areaId }) => {
-                const { emoji } = KNOWN_PLANTS[entityId] ?? DEFAULT_PLANT;
+                const { image } = KNOWN_PLANTS[entityId] ?? DEFAULT_PLANT;
                 const sensors     = this.plantSensorValues[entityId] || {};
                 const interaction = this.plantInteractions[entityId];
                 return {
                     entityId,
                     friendlyName,
                     areaId,
-                    emoji,
+                    image,
                     moisture:       sensors.moisture     ?? null,
                     temperature:    sensors.temperature  ?? null,
                     illuminance:    sensors.illuminance  ?? null,
@@ -267,7 +267,7 @@ export default {
                     items.push({
                         entityId: plant.entityId,
                         name:     plant.friendlyName,
-                        emoji:    plant.emoji,
+                        image:    plant.image,
                         action:   'water',
                         icon:     '💧',
                         label:    'Needs watering',
@@ -278,7 +278,7 @@ export default {
                     items.push({
                         entityId: plant.entityId,
                         name:     plant.friendlyName,
-                        emoji:    plant.emoji,
+                        image:    plant.image,
                         action:   'move-sun',
                         icon:     '☀️',
                         label:    'Needs more light',
@@ -289,7 +289,7 @@ export default {
                     items.push({
                         entityId: plant.entityId,
                         name:     plant.friendlyName,
-                        emoji:    plant.emoji,
+                        image:    plant.image,
                         action:   'move-shade',
                         icon:     '🌙',
                         label:    'Too much light',
@@ -401,7 +401,7 @@ export default {
                         <PlantCard
                             v-for="plant in room.plants"
                             :key="plant.entityId"
-                            :emoji="plant.emoji"
+                            :image="plant.image"
                             :name="plant.friendlyName"
                             :status-class="plantStatusClass(plant.entityId)"
                             @click="openPlant(plant.entityId)"
@@ -425,7 +425,6 @@ export default {
             <div class="header">
                 <button class="nav-btn" @click="closePlant()">←</button>
                 <span class="page-title">{{ selectedPlant.friendlyName }}</span>
-                <span class="header-emoji">{{ selectedPlant.emoji }}</span>
             </div>
 
             <PlantDetail :plant="selectedPlant" />

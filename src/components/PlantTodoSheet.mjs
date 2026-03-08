@@ -71,7 +71,7 @@ const styles = css`
         &.todo-done { opacity: 0.45; }
     }
 
-    & .todo-plant-emoji { font-size: 3.5vh; flex-shrink: 0; }
+    & .todo-plant-emoji { height: 5vh; image-rendering: pixelated; flex-shrink: 0; }
 
     & .todo-info {
         flex-grow: 1;
@@ -127,7 +127,7 @@ export default {
                     :class="{ 'todo-done': item.done }"
                     @click="$emit('select-plant', item.entityId)"
                 >
-                    <span class="todo-plant-emoji">{{ item.emoji }}</span>
+                    <img class="todo-plant-emoji" :src="item.image" :alt="item.name" />
                     <div class="todo-info">
                         <span class="todo-plant-name">{{ item.name }}</span>
                         <span class="todo-action-label">{{ item.icon }} {{ item.label }}</span>

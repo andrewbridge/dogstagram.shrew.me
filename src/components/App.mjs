@@ -37,7 +37,7 @@ export default {
     inject: ["router"],
     template: `<div class="${styles}">
         <main class="page-wrapper">
-            <component :is="router.state.activeRoute" v-bind="router.state.routeParams" />
+            <Suspense><component :is="router.state.activeRoute" v-bind="router.state.routeParams" /></Suspense>
         </main>
         <ProgrammaticModals />
     </div>`,

@@ -1,9 +1,13 @@
 import Route from "route-parser";
-import { ref, markRaw, reactive, watchEffect } from "vue";
+import { ref, markRaw, reactive, watchEffect, defineAsyncComponent } from "vue";
 import Home from "../pages/Home.mjs";
 import Setup from "../pages/Setup.mjs";
 import SplashScreen from "../pages/SplashScreen.mjs";
 import Feed from "../pages/Feed.mjs";
+import EarnCoins from "../pages/EarnCoins.mjs";
+
+const Plants = defineAsyncComponent(() => import("../pages/Plants.mjs").then(m => m.default));
+Plants.name = 'Plants';
 
 const defaultRoute = '/';
 const defaultPath = '#' + defaultRoute;
@@ -12,6 +16,8 @@ export const routes = {
     '/setup': Setup,
     '/home': Home,
     '/feed': Feed,
+    '/earn-coins': EarnCoins,
+    '/plants': Plants,
 };
 
 const compiledRoutes = Object.entries(routes).map(([spec, component]) => ({ route: new Route(spec), spec, component }));

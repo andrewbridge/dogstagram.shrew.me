@@ -179,7 +179,7 @@ export default {
                 <RetroButton variant="info" @click="attemptFeed" :class="{ 'faux-disabled': !canFeed }">Feed</RetroButton>
                 <RetroButton variant="warning" @click="attemptPet" :class="{ 'faux-disabled': !canPet }">Pet</RetroButton>
             </div>
-            <RetroButton class="earn-button" variant="success" @click="router.goTo('Feed')">Earn Coins</RetroButton>
+            <RetroButton class="earn-button" variant="success" @click="router.goTo('EarnCoins')">Earn Coins</RetroButton>
         </div>
         <RetroToast class="toast" :show="noCashToastShown" position="bottom">Not enough coins!</RetroToast>
     </div>

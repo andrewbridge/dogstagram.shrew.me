@@ -8,13 +8,15 @@ const styles = css`
         border-radius: 0.7em;
         padding: 2vh 1vh 1.5vh;
         display: flex;
+        flex-direction: column;
+        justify-content: space-between;
         align-items: center;
         gap: 1vh;
         cursor: pointer;
         &:active { opacity: 0.7; }
     }
 
-    & .card-emoji { height: 8vh; image-rendering: pixelated; }
+    & .card-emoji { height: 8vh; /* image-rendering: pixelated; */ }
 
     & .card-name {
         font-size: 1.1vh;

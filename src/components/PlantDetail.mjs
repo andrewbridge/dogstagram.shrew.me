@@ -38,7 +38,7 @@ const styles = css`
         border-top-right-radius: 1.5em;
     }
 
-    & .hero-emoji { height: 20vh; image-rendering: pixelated; }
+    & .hero-emoji { height: 20vh; /* image-rendering: pixelated; */ }
 
     & .sensor-section {
         display: flex;
